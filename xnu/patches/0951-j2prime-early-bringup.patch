@@ -404,6 +404,19 @@ new file mode 100644
 +#endif
 +
 +#endif /* _PEXPERT_ARM64_J2PRIME_H */
+diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
+--- a/pexpert/pexpert/arm64/Makefile
++++ b/pexpert/pexpert/arm64/Makefile
+@@ -18,7 +18,8 @@
+ 	H13.h \
+ 	VMAPPLE.h \
+ 	BCM2837.h \
+-	SWEET.h
++	SWEET.h \
++	J2PRIME.h
+ 
+ 
+ # Headers installed into System.framework/PrivateHeaders (userspace internal SDK only).
 diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
 --- a/pexpert/pexpert/arm64/board_config.h
 +++ b/pexpert/pexpert/arm64/board_config.h
