@@ -17,7 +17,7 @@ MAGIC = b'J2PRIME\0'
 
 def align(v, a): return (v + a - 1) & -a
 
-def build(kernel_path, adt_path):
+def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
     image = bytearray(open(kernel_path, 'rb').read())
     m = parse_macho(image)
     if m['cputype'] != 0x0100000c: raise ValueError('Mach-O is not ARM64')
@@ -51,7 +51,9 @@ def build(kernel_path, adt_path):
     # The package is loaded just above the proven MT6737 shim AArch64 entry.
     # Conservative bound: the complete 16 MiB recovery image's initial 16 KiB
     # holds the shim, leaving the remaining range below 0x41000000 for payload.
-    src_lo, src_hi = 0x40008000, 0x41000000
+    src_lo, src_hi = source_window
+    if src_lo >= src_hi:
+        raise ValueError('invalid package source window')
     if pa < src_hi and pa + length > src_lo:
         raise ValueError('kernel RAM overlaps the shim/payload load window')
     pieces = []
@@ -64,6 +66,8 @@ def build(kernel_path, adt_path):
         off=len(out); out += data; out += bytes(-len(out) & 15)
         table.append((va, vs, off, len(data)))
     adt_off=len(out); out += adt_blob; out += bytes(-len(out) & 15)
+    if src_lo + len(out) > src_hi:
+        raise ValueError(f'package [{src_lo:#x},{src_lo+len(out):#x}) exceeds source window ending at {src_hi:#x}')
     struct.pack_into('<8sII', out, 0, MAGIC, 1, len(pieces))
     struct.pack_into('<7Q', out, 0x10, virt_base, m['entry'], adt_off, len(adt_blob), kernel_end, pa, length)
     struct.pack_into('<Q', out, 0x48, len(out))
@@ -87,7 +91,8 @@ def build(kernel_path, adt_path):
 
 if __name__ == '__main__':
     ap=argparse.ArgumentParser(); ap.add_argument('kernel'); ap.add_argument('adt'); ap.add_argument('out'); ap.add_argument('--report')
-    a=ap.parse_args(); blob,report=build(a.kernel,a.adt)
+    ap.add_argument('--source-window', nargs=2, type=lambda x: int(x, 0), default=(0x40008000, 0x41000000), metavar=('START','END'))
+    a=ap.parse_args(); blob,report=build(a.kernel,a.adt,tuple(a.source_window))
     open(a.out,'wb').write(blob)
     text=json.dumps(report,indent=2)+'\n'
     if a.report: open(a.report,'w').write(text)

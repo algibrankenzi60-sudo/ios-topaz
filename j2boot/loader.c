@@ -10,6 +10,12 @@
 #define PAGE 4096ULL
 #define MAX_SEGS 32
 #define BOOT_LINE 608
+#ifndef J2_PAYLOAD_BASE
+#define J2_PAYLOAD_BASE 0x40009000ULL
+#endif
+#ifndef J2_PAYLOAD_LIMIT
+#define J2_PAYLOAD_LIMIT 0x41000000ULL
+#endif
 
 struct seg { uint64_t va, vs, off, fs; };
 struct payload {
@@ -60,7 +66,7 @@ void j2_loader_main(void) {
     if (!eq8(p->magic,"J2PRIME\0") || p->version!=1 || !p->nsegs || p->nsegs>MAX_SEGS ||
         p->phys!=RAM_BASE || p->mem_size!=RAM_SIZE || p->total_size<sizeof(uint32_t)*2 ||
         !add_ok((uint64_t)_payload,p->total_size,&payload_end) ||
-        payload_end>0x41000000ULL ||
+        (uint64_t)_payload<J2_PAYLOAD_BASE || payload_end>J2_PAYLOAD_LIMIT ||
         p->adt_off<0x2a8ULL+(uint64_t)p->nsegs*sizeof(struct seg) ||
         !add_ok(p->adt_off,p->adt_size,&adt_end) || adt_end>p->total_size)
         halt(0xffff0000U);
