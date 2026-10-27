@@ -1,6 +1,7 @@
 /* Freestanding second stage for the verified MT6737 AArch32->AArch64 shim.
  * Link at 0x40008000; package starts at the following 4 KiB boundary. */
 #include <stdint.h>
+#include "ramoops_marker.h"
 
 #define RAM_BASE 0x80000000ULL
 #define RAM_SIZE 0x04000000ULL
@@ -125,13 +126,15 @@ void j2_loader_main(void) {
     const char cmdline[]="debug=0xc cpus=1 keepsyms=1";
     for (uint32_t i=0;i<sizeof(cmdline);i++) ba->cmdline[i]=cmdline[i];
     clean_invalidate_dcache(ba_pa,PAGE);
+    j2_ramoops_mark(J2_STAGE_LOADER_READY, 0, 0, 0);
     screen(0xff008000U);
 #if J2_DIAGNOSTIC_HALT
-    /* Stage-check build: prove AArch64 loader reached its final marker, then
-     * stop safely before entering an XNU image whose hardware boot is unknown.
+    /* Stop after validated boot_args and its persistent marker, before entering
+     * an XNU image whose hardware boot is still unknown.
      */
     for (;;) __asm__ volatile("wfe");
 #endif
+    j2_ramoops_mark(J2_STAGE_XNU_CALL, 0, 0, 0);
     __asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");
     ((void (*)(uint64_t))entry_pa)(ba_pa);
     halt(0xffff0000U);

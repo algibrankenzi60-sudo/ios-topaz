@@ -41,7 +41,7 @@ PY
 
 "$CC" --target=arm-none-eabi -fuse-ld=lld -mcpu=cortex-a53 -ffreestanding -fno-builtin -fno-unwind-tables -fno-asynchronous-unwind-tables -nostdlib \
   -Wl,-Ttext="$TRAMPOLINE" -Wl,-e,_start -Wl,--oformat=binary \
-  "$ROOT_W\\j2boot\\kexec_trampoline.S" -o "$BUILD_W\\trampoline.bin"
+  "$ROOT_W\\j2boot\\kexec_trampoline.S" "$ROOT_W\\j2boot\\ramoops_marker.c" -O2 -fno-stack-protector -o "$BUILD_W\\trampoline.bin"
 python3 - "$BUILD/trampoline.bin" "$BUILD/trampoline-padded.bin" <<'PY'
 import sys
 b=open(sys.argv[1],'rb').read()
@@ -53,7 +53,7 @@ PY
 "$CC" --target=aarch64-none-elf -fuse-ld=lld -ffreestanding -fno-builtin -fno-stack-protector \
   -mgeneral-regs-only -mstrict-align -O2 -Wall -Wextra -nostdlib -DJ2_DIAGNOSTIC_HALT="$DIAGNOSTIC_HALT" -DJ2_PAYLOAD_BASE=0x84005000ULL -DJ2_PAYLOAD_LIMIT=0x85000000ULL \
   -Wl,-T,"$ROOT_W\\j2boot\\loader-kexec.ld" -Wl,--build-id=none \
-  "$ROOT_W\\j2boot\\start.S" "$ROOT_W\\j2boot\\loader.c" -o "$BUILD_W\\loader.elf"
+  "$ROOT_W\\j2boot\\start.S" "$ROOT_W\\j2boot\\loader.c" "$ROOT_W\\j2boot\\ramoops_marker.c" -o "$BUILD_W\\loader.elf"
 python3 - "$BUILD/loader.elf" "$BUILD/loader.bin" <<'PY'
 import struct,sys
 b=open(sys.argv[1],'rb').read()

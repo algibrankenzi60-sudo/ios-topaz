@@ -2,6 +2,7 @@
 .syntax unified
 .cpu cortex-a53
 .arm
+#include "ramoops_marker.h"
 .section .text.start, "ax", %progbits
 .global _start
 .type _start, %function
@@ -23,7 +24,15 @@ _start:
 	.word 0x85000000 /* reserved source-window end */
 .Lrun:
 	cpsid if
-	/* Blue screen proves the ARM32 kexec entry ran before the SMC. */
+	/* Linux's soft-restart stack is not valid after MMU shutdown; use free RAM. */
+	ldr sp, =0x83f00000
+	/* The reserved ramoops dmesg slot is the reboot-persistent stage marker. */
+	mov r0, #J2_STAGE_ARM32_ENTRY
+	mov r1, #0
+	mov r2, #0
+	mov r3, #0
+	bl j2_ramoops_mark
+	/* A visible blue screen is a secondary, nonpersistent ARM32 marker. */
 	ldr r2, =0x7f900000
 	ldr r3, =0xff0000ff
 	mov r4, #960
