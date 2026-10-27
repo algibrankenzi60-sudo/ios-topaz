@@ -37,7 +37,8 @@ env:
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: ${{ inputs.machine_config || (github.ref == 'refs/heads/codex/j2prime-early-bringup' && 'J2PRIME') || 'SWEET' }}
   # patch 0140 consumes TOPAZ_4K=1 in XNU's makefiles.
-  TOPAZ_4K: ${{ inputs.topaz_4k && '1' || '0' }}
+  # J2PRIME has a fixed 4 KiB page size; on push there are no workflow inputs.
+  TOPAZ_4K: ${{ (inputs.topaz_4k || inputs.machine_config == 'J2PRIME' || github.ref == 'refs/heads/codex/j2prime-early-bringup') && '1' || '0' }}
   # ccache: xnu is ~2000 compiles; a patch usually changes a few of them
   CCACHE_DIR: ${{ github.workspace }}/.ccache
   CCACHE_BASEDIR: ${{ github.workspace }}
