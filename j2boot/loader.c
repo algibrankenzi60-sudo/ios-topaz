@@ -10,6 +10,9 @@
 #define PAGE 4096ULL
 #define MAX_SEGS 32
 #define BOOT_LINE 608
+#ifndef J2_DIAGNOSTIC_HALT
+#define J2_DIAGNOSTIC_HALT 1
+#endif
 #ifndef J2_PAYLOAD_BASE
 #define J2_PAYLOAD_BASE 0x40009000ULL
 #endif
@@ -123,6 +126,12 @@ void j2_loader_main(void) {
     for (uint32_t i=0;i<sizeof(cmdline);i++) ba->cmdline[i]=cmdline[i];
     clean_invalidate_dcache(ba_pa,PAGE);
     screen(0xff008000U);
+#if J2_DIAGNOSTIC_HALT
+    /* Stage-check build: prove AArch64 loader reached its final marker, then
+     * stop safely before entering an XNU image whose hardware boot is unknown.
+     */
+    for (;;) __asm__ volatile("wfe");
+#endif
     __asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");
     ((void (*)(uint64_t))entry_pa)(ba_pa);
     halt(0xffff0000U);

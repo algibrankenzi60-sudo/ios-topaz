@@ -13,6 +13,11 @@ LIMIT=0x85000000
 TRAMPOLINE=0x84000000
 LOADER=0x84004000
 PACKAGE=0x84005000
+DIAGNOSTIC_HALT="${J2_DIAGNOSTIC_HALT:-1}"
+if [[ "$DIAGNOSTIC_HALT" != 0 && "$DIAGNOSTIC_HALT" != 1 ]]; then
+  echo 'J2_DIAGNOSTIC_HALT must be 0 or 1' >&2
+  exit 2
+fi
 mkdir -p "$BUILD"
 to_win() { wslpath -w "$1"; }
 ROOT_W="$(to_win "$ROOT")"
@@ -46,7 +51,7 @@ print('AArch32 kexec trampoline:',len(b),'entry=0x84000000')
 PY
 
 "$CC" --target=aarch64-none-elf -fuse-ld=lld -ffreestanding -fno-builtin -fno-stack-protector \
-  -mgeneral-regs-only -mstrict-align -O2 -Wall -Wextra -nostdlib -DJ2_PAYLOAD_BASE=0x84005000ULL -DJ2_PAYLOAD_LIMIT=0x85000000ULL \
+  -mgeneral-regs-only -mstrict-align -O2 -Wall -Wextra -nostdlib -DJ2_DIAGNOSTIC_HALT="$DIAGNOSTIC_HALT" -DJ2_PAYLOAD_BASE=0x84005000ULL -DJ2_PAYLOAD_LIMIT=0x85000000ULL \
   -Wl,-T,"$ROOT_W\\j2boot\\loader-kexec.ld" -Wl,--build-id=none \
   "$ROOT_W\\j2boot\\start.S" "$ROOT_W\\j2boot\\loader.c" -o "$BUILD_W\\loader.elf"
 python3 - "$BUILD/loader.elf" "$BUILD/loader.bin" <<'PY'
@@ -75,9 +80,9 @@ if [[ -n "$IOMEM" ]]; then ADT_ARGS=(--iomem "$IOMEM"); fi
 python3 "$ROOT/tools/mkadt_j2.py" "$BUILD/j2prime.adt" --audit-json "$BUILD/ram-audit.json" "${ADT_ARGS[@]}"
 python3 "$ROOT/tools/mkpayload_j2.py" /tmp/xnu-kernel-782ea05/kernel.development.j2prime "$BUILD/j2prime.adt" "$BUILD/j2prime.payload" \
   --source-window "$PACKAGE" "$LIMIT" --report "$BUILD/payload-report.json"
-python3 - "$BUILD/trampoline-padded.bin" "$BUILD/loader-padded.bin" "$BUILD/j2prime.payload" "$BUILD/J2PRIME-KEXEC-DO-NOT-FLASH.bin" "$BUILD/manifest.json" <<'PY'
+python3 - "$BUILD/trampoline-padded.bin" "$BUILD/loader-padded.bin" "$BUILD/j2prime.payload" "$BUILD/J2PRIME-KEXEC-DO-NOT-FLASH.bin" "$BUILD/manifest.json" "$DIAGNOSTIC_HALT" <<'PY'
 import hashlib,json,sys
-tramp,loader,payload=(open(x,'rb').read() for x in sys.argv[1:4]); outpath,manifest=sys.argv[4:]
+tramp,loader,payload=(open(x,'rb').read() for x in sys.argv[1:4]); outpath,manifest=sys.argv[4:6]
 if len(tramp)!=0x4000 or len(loader)!=0x1000: raise SystemExit('unexpected fixed component size')
 blob=tramp+loader+payload
 if blob[4:12]!=b'J2KEX001' or blob[0x5000:0x5008]!=b'J2PRIME\0': raise SystemExit('image component boundaries invalid')
@@ -88,6 +93,7 @@ m={'format':'J2KEX001 + ARM32 SMC trampoline + AArch64 J2 XNU loader + J2PRIME p
    'source_window':['0x84000000','0x85000000'],'bytes':len(blob),'sha256':hashlib.sha256(blob).hexdigest(),
    'trampoline_sha256':hashlib.sha256(tramp).hexdigest(),'loader_sha256':hashlib.sha256(loader).hexdigest(),
    'package_sha256':hashlib.sha256(payload).hexdigest(),'status':'RAM-ONLY KEXEC CANDIDATE; DO NOT FLASH'}
+m['diagnostic_halt_before_xnu']=bool(int(sys.argv[6]))
 open(manifest,'w').write(json.dumps(m,indent=2)+'\n'); print(json.dumps(m,indent=2))
 PY
 "$CC" --target=armv7a-linux-androideabi21 -O2 -Wall -Wextra \
