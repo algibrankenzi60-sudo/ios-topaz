@@ -8,6 +8,7 @@ checked against every memory/reserved-memory range in the input FDT.
 import argparse
 import json
 import os
+import re
 import struct
 import sys
 
@@ -74,7 +75,7 @@ def be_cells(raw, n):
     if len(raw) != 4*n: raise ValueError('invalid DT cell tuple')
     return int.from_bytes(raw, 'big')
 
-def audit_ram(dtb_path, base=RAM_BASE, size=RAM_SIZE):
+def audit_ram(dtb_path, base=RAM_BASE, size=RAM_SIZE, iomem_path=None):
     root = parse_fdt(open(dtb_path, 'rb').read())
     ac = be_cells(root.props.get('#address-cells', b'\0\0\0\2'), 1)
     sc = be_cells(root.props.get('#size-cells', b'\0\0\0\2'), 1)
@@ -119,13 +120,30 @@ def audit_ram(dtb_path, base=RAM_BASE, size=RAM_SIZE):
             lo, hi = max(base, b), min(base + size, b + s)
             if lo < hi:
                 dynamic_overlaps.append([n, hex(lo), hex(hi)])
+    runtime_ram = None
+    if iomem_path:
+        runtime_ram = []
+        for line in open(iomem_path, encoding='ascii', errors='replace'):
+            m = re.match(r'^\s*([0-9a-fA-F]+)-([0-9a-fA-F]+)\s*:\s*System RAM\s*$', line)
+            if m:
+                lo, hi_inclusive = int(m.group(1), 16), int(m.group(2), 16)
+                if hi_inclusive < lo: raise ValueError(f'invalid /proc/iomem interval: {line.rstrip()}')
+                runtime_ram.append((lo, hi_inclusive + 1))
+        if not runtime_ram: raise ValueError(f'no System RAM intervals found in {iomem_path}')
+        if not any(base >= lo and base + size <= hi for lo, hi in runtime_ram):
+            raise ValueError(f'candidate RAM [{base:#x},{base+size:#x}) is not inside one /proc/iomem System RAM interval')
     return {'dtb': os.path.basename(dtb_path), 'memory_banks': [[hex(b), hex(s)] for b,s in banks],
             'static_reserved': [[hex(b), hex(s), n] for b,s,n in reserved],
             'dynamic_reserved': [{'node':n,'size':hex(sz),'alloc_ranges':[[hex(b),hex(s)] for b,s in ranges]} for n,sz,ranges in dynamic],
             'kernel_ram': [hex(base), hex(size)], 'static_reserved_overlap': [],
             'dynamic_reservation_risk': dynamic_risk, 'dynamic_alloc_range_overlap': dynamic_overlaps,
-            'runtime_iomem_evidence': 'J2-XNU-PORT.md records /proc/iomem System RAM [0x80000000,0x9f5c0000); raw capture file was not retained',
-            'caveat': 'Candidate is inside captured FDT RAM, outside its static reservations and every declared dynamic alloc-range, and inside the previously recorded contiguous System RAM interval. Raw /proc/iomem and runtime consys base are not retained; this is not proof against undocumented secure/firmware carve-outs.'}
+            'runtime_system_ram': [[hex(lo),hex(hi)] for lo,hi in runtime_ram] if runtime_ram else None,
+            'runtime_iomem_source': os.path.abspath(iomem_path) if iomem_path else None,
+            'caveat': ('Candidate is inside captured FDT RAM, outside static reservations and every declared dynamic alloc-range, '
+                       'and contained in one captured runtime System RAM interval. Exact consys base is not logged in the available '
+                       'kernel ring; undocumented firmware ownership is still outside these checks.' if runtime_ram else
+                       'Candidate is inside captured FDT RAM and outside static reservations and declared dynamic alloc-ranges; '
+                       'no runtime /proc/iomem evidence was supplied.')}
 
 def build():
     phandle = iter(range(1, 100))
@@ -159,10 +177,10 @@ def build():
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('out'); ap.add_argument('--dtb', default=DEFAULT_DTB)
+    ap.add_argument('out'); ap.add_argument('--dtb', default=DEFAULT_DTB); ap.add_argument('--iomem')
     ap.add_argument('--audit-json')
     a = ap.parse_args()
-    audit = audit_ram(a.dtb)
+    audit = audit_ram(a.dtb, iomem_path=a.iomem)
     if audit['dynamic_reservation_risk']:
         raise SystemExit('candidate RAM intersects a dynamic reserved-memory allocation range: ' +
                          ', '.join(audit['dynamic_reservation_risk']))

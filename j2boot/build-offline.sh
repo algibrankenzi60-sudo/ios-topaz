@@ -33,7 +33,9 @@ import sys
 b=open(sys.argv[1],'rb').read(); b += bytes((-len(b)) & 4095); open(sys.argv[2],'wb').write(b)
 print('loader_bytes:',len(b))
 PY
-python3 "$ROOT/tools/mkadt_j2.py" "$BUILD/j2prime.adt" --audit-json "$BUILD/ram-audit.json"
+IOMEM_ARGS=()
+if [[ -n "${J2_IOMEM:-}" ]]; then IOMEM_ARGS=(--iomem "$J2_IOMEM"); fi
+python3 "$ROOT/tools/mkadt_j2.py" "$BUILD/j2prime.adt" --audit-json "$BUILD/ram-audit.json" "${IOMEM_ARGS[@]}"
 python3 "$ROOT/tools/mkpayload_j2.py" "$KERNEL" "$BUILD/j2prime.adt" "$BUILD/j2prime.payload" --report "$BUILD/payload-report.json"
 python3 - "$SHIM" "$BUILD/loader-padded.bin" "$BUILD/j2prime.payload" "$BUILD/j2prime-diagnostic-kernel.bin" <<'PY'
 import sys

@@ -6,7 +6,7 @@ The earlier 0x44000000 RAM candidate and its description were wrong. The capture
 
 The captured FDT's dynamic `consys-reserve-memory` is 1 MiB, 2 MiB aligned, and has `alloc-ranges = [0x40000000,0x80000000)`, with no fixed `reg`. The new candidate starts at the exclusive end of that allocator range, so it intersects neither that dynamic allocation domain nor any static reserved-memory entry. The board DTS confirms the memory-bank encoding; `of_reserved_mem.c` allocates dynamic reservations from the FDT constraints; the MediaTek callback records the chosen base and uses the area for connectivity EMI sharing. [G532G board DTS](https://github.com/almondnguyen/android_kernel_samsung_grandppltedx/blob/lineage-15.1/arch/arm/boot/dts/mt6737t_grandpplte_cis_ser_04.dts), [MT6735 reserved-memory DTS](https://github.com/almondnguyen/android_kernel_samsung_grandppltedx/blob/lineage-15.1/arch/arm/boot/dts/mt6735.dtsi), [reserved-memory allocator](https://github.com/almondnguyen/android_kernel_samsung_grandppltedx/blob/lineage-15.1/drivers/of/of_reserved_mem.c), [MediaTek consys callback](https://github.com/almondnguyen/android_kernel_samsung_grandppltedx/blob/lineage-15.1/drivers/misc/mediatek/connectivity/common/conn_soc/mt6735/mtk_wcn_consys_hw.c).
 
-The raw `/proc/iomem` text was not retained as a file; its contiguous high-RAM interval survives in `J2-XNU-PORT.md`. Therefore the candidate is source- and FDT-consistent, but the exact runtime map and any secure/firmware carve-outs have not been independently re-read. A boot payload that fits in the recovery partition is not, by that fact, safe to execute.
+The live `/proc/iomem` snapshot is now retained outside git at `/mnt/d/J2-iOS-audit-20261027/runtime-iomem-20261028.txt`. It reports `80000000-9f5bffff : System RAM`, containing the selected 64 MiB interval. The current kernel ring did not return a `consys` line, but the live DTB constrains its 1 MiB allocation to below `0x80000000`; it therefore cannot intersect this XNU window. This validates the selected interval against the available live map and declared allocator constraints, not against undocumented firmware ownership.
 
 ## Loader and handoff
 
@@ -32,12 +32,6 @@ The script rejects candidate windows outside captured RAM, overlapping static re
 
 ### Assessment
 
-**Not yet cleared for an early-boot device test.** The static memory-map contradiction and VA-to-PA arithmetic defect are fixed; source-level constraints place the selected window outside the captured consys allocation range; loader layout and package bounds are checked offline. The remaining minimum check is one read-only snapshot while LineageOS is running:
-
-```sh
-adb shell su -c 'cat /proc/iomem; dmesg | grep -i consys-reserve-memory'
-```
-
-This reads the live RAM map and the resolved 1 MiB consys base so it can be compared with `[0x80000000,0x84000000)`. It does not write storage. ADB currently lists no device, so this snapshot could not be collected in this run. After it passes, the next experiment should be a temporary boot-path test; no partition flash is authorized or performed.
+**RAM placement passes the available runtime checks; kernel handoff remains unverified.** The device was visible using Windows Minimal ADB and Fastboot, while the Linux ADB client had a server-version mismatch. Root read-only access confirmed the high System RAM interval and the capture is saved outside git. A temporary Android boot image was assembled from the verified MTK header, the diagnostic kernel, no ramdisk, and the original captured DTB; it is at `/mnt/d/J2-iOS-audit-20261027/j2prime-earlyboot-runtime-20261028/J2PRIME-TEMP-FASTBOOT-DO-NOT-FLASH.img` (SHA-256 `d29c188ed1480f8a003faee2bc6c7179994cdfa8b6ebd44db3222d4e140ff274`). It has not been sent to the phone. The Windows ADB process stopped responding during the final connection check, so no reboot or `fastboot boot` was issued. The next step is to restore the Windows ADB/fastboot client and perform one temporary boot only after confirming fastboot sees the same device; never flash this artifact.
 
 No GICv2 interrupt delivery, timer tick, XNU entry execution, console after the jump, or boot beyond earliest XNU startup has been verified. This is an early-boot kernel diagnostic, not iOS userspace.
