@@ -446,4 +446,40 @@ diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_
 +
  #ifdef ARM64_BOARD_CONFIG_SWEET
  #include <pexpert/arm64/SWEET.h>
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -34,6 +34,7 @@
+  * the GUI by default: boot-arg sweetfb_noconsole=1 stops drawing it from
+  * the first swap on (it still reaches the persistent log; panics draw).
+  */
++#if defined(SWEET)
+ #include "SweetSurface.h"
  
+ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+@@ -95,7 +96,6 @@
+ extern "C" void sweet_dcache_clean(vm_offset_t addr, unsigned length);  /* osfmk/arm/caches.c */
+ extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+ 
+-#if defined(SWEET)
+ #include <IOKit/IOService.h>
+ #include <IOKit/IOUserClient.h>
+ #include <libkern/c++/OSCollectionIterator.h>
+
+diff --git a/iokit/Kernel/arm/RedwoodGPU.cpp b/iokit/Kernel/arm/RedwoodGPU.cpp
+--- a/iokit/Kernel/arm/RedwoodGPU.cpp
++++ b/iokit/Kernel/arm/RedwoodGPU.cpp
+@@ -30,6 +30,7 @@
+  * redwood_gpu_report(), and stays stopped), fences and buffers as file descriptors.
+  */
+ 
++#if defined(SWEET)
+ #include <IOKit/IOLib.h>
+ #include <IOKit/IOLocks.h>
+ #include <IOKit/IOKitKeys.h>
+@@ -1332,3 +1333,4 @@
+ 	}
+ 	return ret;
+ }
++#endif /* SWEET */
