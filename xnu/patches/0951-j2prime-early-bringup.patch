@@ -1,0 +1,424 @@
+diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
+--- a/makedefs/MakeInc.def
++++ b/makedefs/MakeInc.def
+@@ -29,7 +29,7 @@
+ else ifneq ($(findstring _host,$(RC_ProjectName)),)
+ SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
+ else
+-SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T8101 T8103 VMAPPLE SWEET
++SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T8101 T8103 VMAPPLE SWEET J2PRIME
+ 
+ endif
+ 
+@@ -64,6 +64,7 @@
+ # topaz: Cortex-A53/A73 are ARMv8.0 (no LSE atomics, RCpc, PAN or FP16). An explicit
+ # -mcpu: -arch arm64 otherwise keeps clang's apple-m1 default and its LSE/RCpc features
+ MACHINE_FLAGS_ARM64_SWEET = -DARM64_BOARD_CONFIG_SWEET                -mcpu=cortex-a53 $(if $(filter 1,$(TOPAZ_4K)),-DTOPAZ_4K=1)
++MACHINE_FLAGS_ARM64_J2PRIME = -DARM64_BOARD_CONFIG_J2PRIME -DTOPAZ_4K=1 -mcpu=cortex-a53
+ 
+ 
+ #
+@@ -262,8 +263,8 @@
+ # Without embdedded device map, use a default arch string
+ export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := $(shell echo $(CURRENT_ARCH_CONFIG) | tr A-Z a-z)
+ ifneq ($(filter arm64,$(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG)),)
+-# sweet's Cortex-A76/A55 have no pointer authentication: stay plain arm64
+-ifneq ($(CURRENT_MACHINE_CONFIG),SWEET)
++# SWEET and J2PRIME use non-PAC cores: stay plain arm64
++ifeq ($(filter SWEET J2PRIME,$(CURRENT_MACHINE_CONFIG)),)
+ export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := arm64e
+ endif
+ endif
+@@ -339,11 +340,10 @@
+ ARM64_LINK_ADDR    =0xfffffe0007004000
+ endif
+ 
+-# topaz: TOPAZ_4K=1 in the environment builds SWEET with 4 KiB pages (the
+-# Cortex-A53 silver cluster has no 16 KiB granule). TTBR1 then spans 39 bits:
++# SWEET and J2PRIME use 4 KiB pages on Cortex-A53. TTBR1 then spans 39 bits:
+ # the ARM_LARGE_MEMORY link address at -2 TiB is outside it, so use the
+ # compact iOS kernel VA layout.
+-ifeq ($(CURRENT_MACHINE_CONFIG)$(TOPAZ_4K),SWEET1)
++ifneq ($(filter SWEET1 J2PRIME1,$(CURRENT_MACHINE_CONFIG)$(TOPAZ_4K)),)
+ LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY
+ ARM64_PLKSEG_ADDR  =0xfffffff004004000
+ ARM64_LINK_ADDR    =0xfffffff007004000
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1825,9 +1825,9 @@
+ #define ARM64_PHYSMAP_ALIGNMENT_PADDING (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE)
+ #endif
+ 
+-#if defined(SWEET) && defined(TOPAZ_4K)
++#if (defined(SWEET) && defined(TOPAZ_4K)) || defined(J2PRIME)
+ /*
+- * 4 KiB pages: alias the topaz splash framebuffer (six 2 MB blocks) right
++ * 4 KiB pages: alias the early framebuffer before TTBR0 is torn down. right
+  * above low globals, where the KVA has nothing, so the early console
+  * survives the TTBR0 teardown. Slots in use or no L2 table: no alias.
+  */
+@@ -1844,16 +1844,23 @@
+ 	}
+ 	tt_entry_t *l2 = (tt_entry_t *)phystokv(l1 & ARM_TTE_TABLE_MASK);
+ 	unsigned int first = (unsigned int)((va & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT);
+-	if (first + 6 > TTE_PGENTRIES) {
++#if defined(J2PRIME)
++	const unsigned int block_count = 2;
++	const uint64_t fb_phys_base = 0x7f800000ULL;
++#else
++	const unsigned int block_count = 6;
++	const uint64_t fb_phys_base = 0x5c000000ULL;
++#endif
++	if (first + block_count > TTE_PGENTRIES) {
+ 		return;
+ 	}
+-	for (unsigned int i = 0; i < 6; i++) {
++	for (unsigned int i = 0; i < block_count; i++) {
+ 		if (l2[first + i] != ARM_TTE_EMPTY) {
+ 			return;
+ 		}
+ 	}
+-	for (unsigned int i = 0; i < 6; i++) {
+-		l2[first + i] = (0x5c000000ULL + i * ARM_TT_L2_SIZE) | ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK |
++	for (unsigned int i = 0; i < block_count; i++) {
++		l2[first + i] = (fb_phys_base + i * ARM_TT_L2_SIZE) | ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK |
+ 		    ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) |
+ 		    ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_WRITECOMB) |
+ 		    ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX;
+@@ -2217,7 +2224,7 @@
+ 
+ 	arm_set_user_tbi();
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ 	/* phystokv() must still refer to the bootstrap aperture here. */
+ 	sweet_early_map_final();
+ #endif
+@@ -2226,10 +2233,14 @@
+ 
+ 	ml_enable_monitor();
+ 
+-#if defined(SWEET) && defined(TOPAZ_4K)
+-	/* The final TTBR1 is live; leave the outgoing VA=PA framebuffer alias. */
++#if (defined(SWEET) && defined(TOPAZ_4K)) || defined(J2PRIME)
++	/* The final TTBR1 is live; leave the outgoing framebuffer alias. */
+ 	if (sweet_early_fb_mapped) {
++#if defined(J2PRIME)
++		sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL);
++#else
+ 		sweet_early_relocate(SWEET_EARLY_FB_VA);
++#endif
+ 	} else {
+ 		sweet_early_disable();
+ 	}
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -131,6 +131,10 @@
+ 
+ 
+ void sleh_irq(arm_saved_state_t *);
++#if defined(J2PRIME)
++extern uint32_t j2_gicv2_ack_irq(void);
++extern void j2_gicv2_eoi(uint32_t);
++#endif
+ void sleh_fiq(arm_saved_state_t *);
+ void sleh_serror(arm_context_t *context, uint32_t esr, vm_offset_t far);
+ void sleh_invalid_stack(arm_context_t *context, uint32_t esr, vm_offset_t far) __dead2;
+@@ -1934,7 +1938,35 @@
+ #endif
+ 
+ 
+-#if defined(SWEET)
++#if defined(J2PRIME)
++	/* GICv2-style MT6737T CPU interface is memory mapped. */
++	uint32_t iar = j2_gicv2_ack_irq();
++	uint32_t intid = iar & 0x3ff;
++	if (intid == GIC_SPURIOUS_IRQ) {
++		return;
++	}
++	if (intid == J2_VTIMER_INTID) {
++		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_TIMER);
++		cdp->cpu_decrementer = -1;
++		INTERRUPT_MASKED_DEBUG_START(rtclock_intr, DBG_INTR_TYPE_TIMER);
++		rtclock_intr(TRUE);
++		INTERRUPT_MASKED_DEBUG_END();
++		j2_gicv2_eoi(iar);
++	} else if (intid < 16) {
++		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_IPI);
++		j2_gicv2_eoi(iar);
++		cpu_signal_handler();
++	} else {
++		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_OTHER);
++		if (cdp->interrupt_handler) {
++			cdp->interrupt_handler(cdp->interrupt_target,
++			    cdp->interrupt_refCon,
++			    cdp->interrupt_nub,
++			    intid);
++		}
++		j2_gicv2_eoi(iar);
++	}
++#elif defined(SWEET)
+ 	/*
+ 	 * sweet: TrustZone owns GIC Group 0, so the timer and IPIs that other
+ 	 * ARM64 targets take as FIQs arrive here as Group 1 IRQs.
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -513,16 +513,22 @@
+ 	mov		x20, x0
+ 	mov		x21, #0
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ 	/* Stage 0: white 64x32 band, no stack or page tables needed. */
+-#if defined(TOPAZ_4K)
++#if defined(J2PRIME)
++	MOV64	x0, (0x7f900000 + 2176 * 928)
++#elif defined(TOPAZ_4K)
+ 	MOV64	x0, (0x5c000000 + 2368 * 4320)	/* topaz splash framebuffer */
+ #else
+ 	MOV64	x0, (0x9c000000 + 2368 * 4320)
+ #endif
+ 	mov		w1, #-1
+ 	mov		x2, #32
++#if defined(J2PRIME)
++	mov		x4, #2176
++#else
+ 	mov		x4, #4320
++#endif
+ Lsweet_mark_row:
+ 	mov		x3, #64
+ 	mov		x5, x0
+@@ -682,26 +688,30 @@
+ 	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
+ 	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
+ 
+-#if defined(SWEET) && defined(TOPAZ_4K)
+-	/*
+-	 * topaz splash framebuffer (0x5c000000, 1080x2400x4 = 10 MB) VA=PA as
+-	 * Normal-NC: six 2 MB blocks in an L2 table of its own (L1 index 1;
+-	 * RAM is at 0x140000000), for the early screen console.
+-	 */
++#if defined(J2PRIME) || (defined(SWEET) && defined(TOPAZ_4K))
++	/* Early framebuffer VA=PA, Normal-NC, outside the XNU usable RAM range. */
+ 	add		x2, x2, PGBYTES
++#if defined(J2PRIME)
++	MOV64	x10, 0x7f800000
++#else
+ 	MOV64	x10, 0x5c000000
++#endif
+ 	create_l1_table_entry x10, x1, x2, x11, x12, x13
+ 	MOV64	x11, (ARM_TTE_TYPE_BLOCK | ARM_TTE_VALID | ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) | ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_WRITECOMB) | ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX)
+ 	orr		x11, x11, x10
+-	and		x12, x10, #(ARM_TT_L2_INDEX_MASK)
+-	lsr		x12, x12, #(ARM_TT_L2_SHIFT)
+-	add		x13, x2, x12, lsl #(TTE_SHIFT)
++	and		x13, x10, #(ARM_TT_L2_INDEX_MASK)
++	lsr		x13, x13, #(ARM_TT_L2_SHIFT)
++	add		x13, x2, x13, lsl #(TTE_SHIFT)
++#if defined(J2PRIME)
++	mov		x12, #2
++#else
+ 	mov		x12, #6
+-Ltopaz_fb_block:
++#endif
++Learly_fb_block:
+ 	str		x11, [x13], #(1 << TTE_SHIFT)
+ 	add		x11, x11, #(ARM_TT_L2_SIZE)
+ 	subs	x12, x12, #1
+-	b.ne	Ltopaz_fb_block
++	b.ne	Learly_fb_block
+ #endif
+ 
+ #if defined(SWEET) && !defined(TOPAZ_4K)
+diff --git a/osfmk/arm64/sweet_early.c b/osfmk/arm64/sweet_early.c
+--- a/osfmk/arm64/sweet_early.c
++++ b/osfmk/arm64/sweet_early.c
+@@ -7,20 +7,30 @@
+  */
+ #include <arm64/sweet_early.h>
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ #include <stdint.h>
+ #include <kern/misc_protos.h>
+ 
+-#if defined(TOPAZ_4K)
++#if defined(J2PRIME)
++static volatile uint32_t *early_fb = (volatile uint32_t *)(uintptr_t)0x7f900000;
++#define EARLY_WIDTH 540u
++#define EARLY_HEIGHT 960u
++#define EARLY_STRIDE (2176u / 4)
++#define EARLY_SCALE 1u
++#elif defined(TOPAZ_4K)
+ static volatile uint32_t *early_fb = (volatile uint32_t *)(uintptr_t)0x5c000000;  /* topaz splash */
+-#else
+-static volatile uint32_t *early_fb = (volatile uint32_t *)(uintptr_t)0x9c000000;
+-#endif
+-#define EARLY_FB early_fb
+ #define EARLY_WIDTH 1080u
+ #define EARLY_HEIGHT 2400u
+ #define EARLY_STRIDE (4320u / 4)
+ #define EARLY_SCALE 2u
++#else
++static volatile uint32_t *early_fb = (volatile uint32_t *)(uintptr_t)0x9c000000;
++#define EARLY_WIDTH 1080u
++#define EARLY_HEIGHT 2400u
++#define EARLY_STRIDE (4320u / 4)
++#define EARLY_SCALE 2u
++#endif
++#define EARLY_FB early_fb
+ #define EARLY_CELL_W (8u * EARLY_SCALE)
+ #define EARLY_CELL_H (16u * EARLY_SCALE)
+ #define EARLY_ROWS ((EARLY_HEIGHT - 32u) / EARLY_CELL_H)
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
+--- a/osfmk/arm64/sweet_early.h
++++ b/osfmk/arm64/sweet_early.h
+@@ -6,7 +6,7 @@
+ #include <stdarg.h>
+ #include <stdint.h>
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ void sweet_early_mark(unsigned int stage, const char *label);
+ void sweet_early_putc(char c);
+ void sweet_early_panic(const char *fmt, va_list *args);
+diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
+--- a/pexpert/arm/pe_fiq.c
++++ b/pexpert/arm/pe_fiq.c
+@@ -222,6 +222,80 @@
+ 	__builtin_arm_isb(ISB_SY);
+ #endif /* SWEET */
+ }
++#elif defined(J2PRIME)
++/* MT6737T uses the memory-mapped MTK GIC CPU interface (GICv2 style). */
++#define J2_GICD_CTLR          0x000
++#define J2_GICD_CTLR_ENABLEGRP1  (1U << 1)
++#define J2_GICD_IGROUPR0      0x080
++#define J2_GICD_ISENABLER0    0x100
++#define J2_GICD_ICENABLER0    0x180
++#define J2_GICD_IPRIORITYR0   0x400
++#define J2_GICC_CTLR          0x000
++#define J2_GICC_CTLR_ENABLEGRP1 (1U << 1)
++#define J2_GICC_PMR           0x004
++#define J2_GICC_BPR           0x008
++#define J2_GICC_IAR           0x00c
++#define J2_GICC_EOIR          0x010
++
++static vm_offset_t j2_gicd_base;
++static vm_offset_t j2_gicc_base;
++
++static uint32_t
++j2_gic_read32(vm_offset_t base, uint32_t offset)
++{
++	return *((volatile uint32_t *)(base + offset));
++}
++
++static void
++j2_gic_write32(vm_offset_t base, uint32_t offset, uint32_t value)
++{
++	*((volatile uint32_t *)(base + offset)) = value;
++}
++
++uint32_t
++j2_gicv2_ack_irq(void)
++{
++	return j2_gic_read32(j2_gicc_base, J2_GICC_IAR);
++}
++
++void
++j2_gicv2_eoi(uint32_t iar)
++{
++	j2_gic_write32(j2_gicc_base, J2_GICC_EOIR, iar);
++	__builtin_arm_dsb(DSB_SY);
++}
++
++void
++pe_init_fiq(void)
++{
++	j2_gicd_base = ml_io_map(J2_GICD_PBASE, J2_GIC_MMIO_SIZE);
++	j2_gicc_base = ml_io_map(J2_GICC_PBASE, J2_GIC_MMIO_SIZE);
++	if (!j2_gicd_base || !j2_gicc_base) {
++		panic("J2 GIC: failed to map distributor or CPU interface");
++	}
++
++	/* Stop this CPU interface while setting up its banked timer PPI. */
++	j2_gic_write32(j2_gicc_base, J2_GICC_CTLR, 0);
++	j2_gic_write32(j2_gicd_base, J2_GICD_ICENABLER0, 1U << J2_VTIMER_INTID);
++
++	/* Group 1 Non-secure, with a normal interrupt priority. */
++	uint32_t groups = j2_gic_read32(j2_gicd_base, J2_GICD_IGROUPR0);
++	j2_gic_write32(j2_gicd_base, J2_GICD_IGROUPR0, groups | (1U << J2_VTIMER_INTID));
++	uint32_t priority_offset = J2_GICD_IPRIORITYR0 + (J2_VTIMER_INTID & ~3U);
++	uint32_t priority_shift = (J2_VTIMER_INTID & 3U) * 8U;
++	uint32_t priorities = j2_gic_read32(j2_gicd_base, priority_offset);
++	priorities = (priorities & ~(0xffU << priority_shift)) | (0xa0U << priority_shift);
++	j2_gic_write32(j2_gicd_base, priority_offset, priorities);
++	j2_gic_write32(j2_gicd_base, J2_GICD_ISENABLER0, 1U << J2_VTIMER_INTID);
++	j2_gic_write32(j2_gicd_base, J2_GICD_CTLR,
++	    j2_gic_read32(j2_gicd_base, J2_GICD_CTLR) | J2_GICD_CTLR_ENABLEGRP1);
++
++	j2_gic_write32(j2_gicc_base, J2_GICC_BPR, 0);
++	j2_gic_write32(j2_gicc_base, J2_GICC_PMR, 0xff);
++	j2_gic_write32(j2_gicc_base, J2_GICC_CTLR, J2_GICC_CTLR_ENABLEGRP1);
++	__builtin_arm_dsb(DSB_SY);
++	__builtin_arm_isb(ISB_SY);
++}
+ #else
+ void
+ pe_init_fiq()
+diff --git a/pexpert/pexpert/arm64/J2PRIME.h b/pexpert/pexpert/arm64/J2PRIME.h
+new file mode 100644
+--- /dev/null
++++ b/pexpert/pexpert/arm64/J2PRIME.h
+@@ -0,0 +1,30 @@
++/* Samsung Galaxy J2 Prime (SM-G532G), MediaTek MT6737T / Cortex-A53.
++ * Minimal single-core XNU bring-up configuration; this is not a full SoC port.
++ */
++#ifndef _PEXPERT_ARM64_J2PRIME_H
++#define _PEXPERT_ARM64_J2PRIME_H
++
++#define NO_MONITOR                    1
++#define NO_ECORE                      1
++#define J2PRIME                       1
++#define ARM_ARCH_TIMER
++#define __ARM_ARCH__                  8
++#define __ARM_VMSA__                  8
++#define __ARM_VFP__                   4
++#define __ARM_COHERENT_CACHE__        1
++#define __ARM_DEBUG__                 7
++#define __ARM_ENABLE_SWAP__           1
++#define __ARM_V8_CRYPTO_EXTENSIONS__  1
++#define HAS_GIC_V3                    0
++#define HAS_GIC_V2                    1
++#define J2_VTIMER_INTID               27
++#define GIC_SPURIOUS_IRQ              1023
++#define J2_GICD_PBASE                 0x10221000ULL
++#define J2_GICC_PBASE                 0x10222000ULL
++#define J2_GIC_MMIO_SIZE              0x10000ULL
++
++#ifndef ASSEMBLER
++#define PLATFORM_PANIC_LOG_DISABLED
++#endif
++
++#endif /* _PEXPERT_ARM64_J2PRIME_H */
+diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
+--- a/pexpert/pexpert/arm64/board_config.h
++++ b/pexpert/pexpert/arm64/board_config.h
+@@ -97,6 +97,14 @@
+ #define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
+ #endif  /* ARM64_BOARD_CONFIG_BCM2837 */
+ 
++#ifdef ARM64_BOARD_CONFIG_J2PRIME
++#include <pexpert/arm64/J2PRIME.h>
++#define MAX_L2_CLINE                   6
++#define MAX_CPUS                       1
++#define MAX_CPU_CLUSTERS               1
++#define CORE_NCTRS                     8 /* placeholder for early kernel bring-up */
++#endif  /* ARM64_BOARD_CONFIG_J2PRIME */
++
+ #ifdef ARM64_BOARD_CONFIG_SWEET
+ #include <pexpert/arm64/SWEET.h>
+ 

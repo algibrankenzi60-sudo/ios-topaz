@@ -2,6 +2,10 @@
 
 ## Agent handoff / active work (2026-10-15, latest)
 
+### >>> UPDATE 2026-10-27: J2 PRIME XNU EXPERIMENT (separate branch) <<<
+
+Branch `codex/j2prime-early-bringup` adds `xnu/patches/0951-j2prime-early-bringup.patch` and routes its push CI build to `MACHINE_CONFIG=J2PRIME`. The patch adds an experimental one-core ARM64/Cortex-A53, 4 KiB-page target, an MMIO GICv2 interrupt path (timer PPI 27), and early LCD framebuffer mapping for SM-G532G. It applies cleanly and the nine changed files byte-match the generated draft; Group 1 is enabled consistently for the non-secure timer PPI. No XNU compiler run or J2 runtime boot has yet verified it; a second-stage XNU loader, J2 ADT/boot_args, fragmented RAM handling, and hardware driver bring-up are still missing. Do not flash this kernel. Audit and patch details: `/mnt/d/J2-iOS-audit-20261027/J2-XNU-EARLY-BRINGUP-PATCH.md`.
+
 ### >>> UPDATE 2026-10-18 (read first, then the 10-17 handoff below) <<<
 
 **LIVE LOG over USB (0077, boot 0077s): no more recovery round-trips.** Boot an image with `sweetusb=2`, run `tools/sweet-usbnet.sh logs/live-NAME.txt` on the PC: it waits for the phone's CDC-ECM interface, sets 192.168.7.1/24 (sudo) and prints/saves the kernel console the phone streams every 100 ms as UDP to 192.168.7.1:5140 (starts with the last 64 KiB). `ping 192.168.7.2` checks the link. Current image: `shim/out/shim-boot-0077s.img` (kernel 0077, ADT sweet-0069hi, cpus=6, sweetfb_noconsole=1, sweetfb_hz=30, sweetusb=2). The recovery pull (`tools/sweet-log-pull.sh`) is still the way after a panic/hang before USB comes up.
