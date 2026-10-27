@@ -236,3 +236,10 @@ diff --git a/bsd/conf/files b/bsd/conf/files
  
  # Apple OSS hfs-627.100.6, staged by xnu/patches/0026-stage-hfs.sh
  bsd/sweet_hfs/core/BTree.c		optional sweet_hfs
+diff --git a/config/MASTER.arm64.sweet b/config/MASTER.arm64.sweet
+--- a/config/MASTER.arm64.sweet
++++ b/config/MASTER.arm64.sweet
+@@ -114,2 +114,3 @@
+ options   CONFIG_RESLIDE_SHARED_CACHE		# <reslide_shared_cache>
+ options   CONFIG_KERNEL_TBI		# <kernel_tbi>
++options sweet_platform

@@ -1,0 +1,35 @@
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2180,17 +2180,17 @@
+ 	return dec;
+ }
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ /*
+- * sweet: arm_vm_init() calls this unconditionally; Apple's definition (it
+- * enters the PPL/monitor) ships only in the closed per-SoC library. There is
+- * no monitor on SWEET.
++ * arm_vm_init() calls this unconditionally. Apple's implementation (which
++ * enters the PPL/monitor) ships only in closed per-SoC libraries. These open
++ * non-PPL targets have no monitor to enable.
+  */
+ void
+ ml_enable_monitor(void)
+ {
+ }
+-#endif /* SWEET */
++#endif /* SWEET || J2PRIME */
+ 
+ boolean_t
+ ml_get_timer_pending(void)
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -28,5 +28,5 @@
+ iokit/Kernel/arm/SweetBattery.cpp                                optional iokitcpp sweet_platform
+ iokit/Kernel/arm/hid/SweetHID.cpp                                optional iokitcpp sweet_platform
+ iokit/Kernel/arm/hid/IOHIDEvent.cpp                              optional iokitcpp
+-iokit/Kernel/arm/hid/IOHIDEventServiceQueue.cpp                  optional iokitcpp
+-iokit/Kernel/arm/hid/IOHIDEventServiceUserClient.cpp             optional iokitcpp
++iokit/Kernel/arm/hid/IOHIDEventServiceQueue.cpp                  optional iokitcpp sweet_platform
++iokit/Kernel/arm/hid/IOHIDEventServiceUserClient.cpp             optional iokitcpp sweet_platform
