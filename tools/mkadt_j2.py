@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Create a conservative J2 Prime ADT from the captured Android DTB.
 
-This only exports audited boot facts. The default RAM window is the largest
-single statically unreserved interval in the DTB's declared 128 MiB bank.
-It intentionally does not copy Topaz/SWEET addresses or identities.
+The 64 MiB early-boot window is a subset of the observed upper System RAM
+interval, starts at the exact end of the captured consys alloc-range, and is
+checked against every memory/reserved-memory range in the input FDT.
 """
 import argparse
 import json
@@ -15,7 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adt
 
 DEFAULT_DTB = '/mnt/d/J2-iOS-audit-20261027/live-boot-88f000.dtb'
-RAM_BASE, RAM_SIZE = 0x44000000, 0x04000000
+# Captured /proc/iomem audit: 0x80000000..0x9f5c0000 is contiguous System RAM.
+# The live FDT's dynamic consys alloc-range is [0x40000000,0x80000000).
+# Keep the first XNU window to a conservative 64 MiB subset at that boundary.
+RAM_BASE, RAM_SIZE = 0x80000000, 0x04000000
 SOC_BASE = 0x01000000
 GICD, GICC = 0x10221000, 0x10222000
 GIC_SIZE = 0x10000
@@ -110,12 +113,19 @@ def audit_ram(dtb_path, base=RAM_BASE, size=RAM_SIZE):
     if not bank_ok: raise ValueError(f'RAM window {base:#x}+{size:#x} is outside captured FDT memory banks {banks!r}')
     if overlaps: raise ValueError(f'RAM window overlaps reserved-memory: {overlaps!r}')
     dynamic_risk = [n for n, sz, ranges in dynamic if not ranges or any(base < b+s and b < base+size for b,s in ranges)]
+    dynamic_overlaps = []
+    for n, sz, ranges in dynamic:
+        for b, s in ranges:
+            lo, hi = max(base, b), min(base + size, b + s)
+            if lo < hi:
+                dynamic_overlaps.append([n, hex(lo), hex(hi)])
     return {'dtb': os.path.basename(dtb_path), 'memory_banks': [[hex(b), hex(s)] for b,s in banks],
             'static_reserved': [[hex(b), hex(s), n] for b,s,n in reserved],
             'dynamic_reserved': [{'node':n,'size':hex(sz),'alloc_ranges':[[hex(b),hex(s)] for b,s in ranges]} for n,sz,ranges in dynamic],
             'kernel_ram': [hex(base), hex(size)], 'static_reserved_overlap': [],
-            'dynamic_reservation_risk': dynamic_risk,
-            'caveat': 'Candidate is inside declared RAM and outside static carve-outs. Dynamic reservation may allocate from this candidate; RAM availability is therefore unverified and this payload is not for device boot.'}
+            'dynamic_reservation_risk': dynamic_risk, 'dynamic_alloc_range_overlap': dynamic_overlaps,
+            'runtime_iomem_evidence': 'J2-XNU-PORT.md records /proc/iomem System RAM [0x80000000,0x9f5c0000); raw capture file was not retained',
+            'caveat': 'Candidate is inside captured FDT RAM, outside its static reservations and every declared dynamic alloc-range, and inside the previously recorded contiguous System RAM interval. Raw /proc/iomem and runtime consys base are not retained; this is not proof against undocumented secure/firmware carve-outs.'}
 
 def build():
     phandle = iter(range(1, 100))
@@ -153,8 +163,11 @@ if __name__ == '__main__':
     ap.add_argument('--audit-json')
     a = ap.parse_args()
     audit = audit_ram(a.dtb)
+    if audit['dynamic_reservation_risk']:
+        raise SystemExit('candidate RAM intersects a dynamic reserved-memory allocation range: ' +
+                         ', '.join(audit['dynamic_reservation_risk']))
     blob = adt.serialize(build())
     with open(a.out, 'wb') as f: f.write(blob)
     if a.audit_json:
         with open(a.audit_json, 'w') as f: json.dump(audit, f, indent=2); f.write('\n')
-    print(f'{a.out}: {len(blob)} bytes; candidate RAM {RAM_BASE:#x}+{RAM_SIZE:#x}; diagnostic ADT')
+    print(f'{a.out}: {len(blob)} bytes; candidate RAM [{RAM_BASE:#x},{RAM_BASE+RAM_SIZE:#x}); diagnostic ADT')

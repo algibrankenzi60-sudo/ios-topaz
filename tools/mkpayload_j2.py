@@ -41,6 +41,13 @@ def build(kernel_path, adt_path):
         if s['fileoff'] + s['filesize'] > len(image): raise ValueError(f"{s['name']} exceeds Mach-O file")
         lo, hi = s['vmaddr'] + bias, s['vmaddr'] + bias + s['vmsize']
         if lo < pa or hi > pa + length: raise ValueError(f"{s['name']} destination outside audited RAM")
+    kernel_end_pa = pa + (kernel_end - virt_base)
+    adt_pa = align(kernel_end_pa, 4096)
+    adt_end_pa = adt_pa + len(adt_blob)
+    boot_args_pa = align(adt_end_pa, PAGE)
+    boot_args_end = boot_args_pa + PAGE
+    if boot_args_end > pa + length:
+        raise ValueError('kernel, ADT, and boot_args exceed the audited RAM window')
     # The package is loaded just above the proven MT6737 shim AArch64 entry.
     # Conservative bound: the complete 16 MiB recovery image's initial 16 KiB
     # holds the shim, leaving the remaining range below 0x41000000 for payload.
@@ -69,6 +76,10 @@ def build(kernel_path, adt_path):
         'virt_base': hex(virt_base), 'entry_va': hex(m['entry']), 'kernel_end_va': hex(kernel_end),
         'candidate_ram_pa': hex(pa), 'candidate_ram_size': hex(length), 'load_source_window': [hex(src_lo),hex(src_hi)],
         'segment_ranges_pa': [[name,hex(va+bias),hex(va+bias+vs)] for va,vs,_,name in pieces],
+        'kernel_footprint_from_phys_base': hex((kernel_end - virt_base)),
+        'adt_physical_range': [hex(adt_pa), hex(adt_end_pa)],
+        'boot_args_physical_range': [hex(boot_args_pa), hex(boot_args_end)],
+        'remaining_ram_after_kernel_and_boot_args': hex(pa + length - boot_args_end),
         'adt_bytes': len(adt_blob), 'partition_limit_bytes': 16*1024*1024,
         'fits_partition_alone': len(out) <= 16*1024*1024,
     }
