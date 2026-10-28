@@ -46,10 +46,8 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
     adt_end_pa = adt_pa + len(adt_blob)
     boot_args_pa = align(adt_end_pa, PAGE)
     boot_args_end = boot_args_pa + PAGE
-    tables_pa = boot_args_end
-    tables_end = tables_pa + 5 * PAGE
-    if tables_end > pa + length:
-        raise ValueError('kernel, ADT, boot_args, and five bootstrap tables exceed the audited RAM window')
+    if boot_args_end > pa + length:
+        raise ValueError('kernel, ADT, and boot_args exceed the audited RAM window')
     # The compressed container lives in the Android ramdisk. The loader expands
     # this package to a bounded staging window immediately below XNU's first
     # physical segment; validate this source window after the final size is known.
@@ -72,8 +70,8 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
         dst_lo, dst_hi = va + bias, va + bias + vs
         if src_lo < dst_hi and dst_lo < src_lo + len(out):
             raise ValueError(f'staging package overlaps {name}: [{src_lo:#x},{src_lo+len(out):#x}) vs [{dst_lo:#x},{dst_hi:#x})')
-    if src_lo < tables_end and kernel_end_pa < src_lo + len(out):
-        raise ValueError('staging package overlaps XNU end, ADT, boot_args, or bootstrap tables')
+    if src_lo < boot_args_end and kernel_end_pa < src_lo + len(out):
+        raise ValueError('staging package overlaps XNU end, ADT, or boot_args')
     struct.pack_into('<8sII', out, 0, MAGIC, 1, len(pieces))
     struct.pack_into('<7Q', out, 0x10, virt_base, m['entry'], adt_off, len(adt_blob), kernel_end, pa, length)
     struct.pack_into('<Q', out, 0x48, len(out))
@@ -89,9 +87,9 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
         'kernel_footprint_from_phys_base': hex((kernel_end - virt_base)),
         'adt_physical_range': [hex(adt_pa), hex(adt_end_pa)],
         'boot_args_physical_range': [hex(boot_args_pa), hex(boot_args_end)],
-        'bootstrap_tables_physical_range': [hex(tables_pa), hex(tables_end)],
-        'loader_identity_mapping': ['0x40000000', '0x42000000'],
-        'remaining_ram_after_loader_data': hex(pa + length - tables_end),
+        'xnu_bootstrap_tables': 'allocated by XNU start_first_cpu inside the linked kernel image',
+        'xnu_handoff': 'physical entry with EL1 MMU/caches disabled; XNU creates its own bootstrap tables',
+        'remaining_ram_after_loader_data': hex(pa + length - boot_args_end),
         'adt_bytes': len(adt_blob), 'partition_limit_bytes': 16*1024*1024,
         'fits_partition_alone': len(out) <= 16*1024*1024,
     }

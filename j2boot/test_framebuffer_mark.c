@@ -22,7 +22,10 @@ int main(void)
 	j2_framebuffer_render(fb, J2_SCREEN_LOADER_REJECT);
 	assert(fb[0] == 0xff0000ffU);
 	assert(fb[J2_FB_HEIGHT * J2_FB_STRIDE_PIXELS - 1] == 0xff0000ffU);
+	j2_framebuffer_render(fb, J2_SCREEN_XNU_HANDOFF);
+	assert(fb[0] == 0xffffffffU);
+	assert(fb[J2_FB_HEIGHT * J2_FB_STRIDE_PIXELS - 1] == 0xffffffffU);
 	free((void *)fb);
-	puts("J2 framebuffer stage marker pattern checks passed");
+	puts("J2 framebuffer stage marker pattern checks passed, including pre-XNU handoff");
 	return 0;
 }

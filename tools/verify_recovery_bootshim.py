@@ -51,26 +51,33 @@ if expanded > 0x01000000:
 payload_phys, payload_size = struct.unpack_from("<QQ", expected_payload, 0x38)
 nsegs = struct.unpack_from("<I", expected_payload, 0x0c)[0]
 virt_base = struct.unpack_from("<Q", expected_payload, 0x10)[0]
+entry_va = struct.unpack_from("<Q", expected_payload, 0x18)[0]
 adt_off, adt_size = struct.unpack_from("<QQ", expected_payload, 0x20)
 kernel_end_va = struct.unpack_from("<Q", expected_payload, 0x30)[0]
 if not 0 < nsegs <= 32 or 0x2a8 + nsegs * 32 > expanded:
     raise SystemExit("invalid package segment table bounds")
 stage_lo, stage_hi = 0x80000000, 0x80000000 + expanded
+entry_pa = None
 for i in range(nsegs):
     va, vsize = struct.unpack_from("<QQ", expected_payload, 0x2a8 + i * 32)
     dst_lo, dst_hi = payload_phys + va - virt_base, payload_phys + va - virt_base + vsize
+    if va <= entry_va < va + vsize:
+        entry_pa = payload_phys + entry_va - virt_base
     if stage_lo < dst_hi and dst_lo < stage_hi:
         raise SystemExit(f"decompression stage overlaps XNU segment {i}")
 kernel_end_pa = payload_phys + kernel_end_va - virt_base
 adt_start = align(kernel_end_pa, 4096)
 adt_end = adt_start + adt_size
 boot_args_start = align(adt_end, 4096)
-tables_start = boot_args_start + 4096
-tables_end = tables_start + 5 * 4096
-if adt_off > expanded or adt_size > expanded - adt_off or tables_end > payload_phys + payload_size:
-    raise SystemExit("kernel/ADT/boot_args/page-table placement exceeds candidate RAM")
-if stage_lo < tables_end and kernel_end_pa < stage_hi:
-    raise SystemExit("decompression stage overlaps kernel-end ADT/boot_args/table allocation")
+boot_args_end = boot_args_start + 4096
+if entry_pa is None:
+    raise SystemExit("XNU entry point is outside every loaded segment")
+if not (payload_phys <= entry_pa < payload_phys + payload_size):
+    raise SystemExit("physical XNU entry is outside audited RAM")
+if adt_off > expanded or adt_size > expanded - adt_off or boot_args_end > payload_phys + payload_size:
+    raise SystemExit("kernel/ADT/boot_args placement exceeds candidate RAM")
+if stage_lo < boot_args_end and kernel_end_pa < stage_hi:
+    raise SystemExit("decompression stage overlaps kernel-end ADT/boot_args allocation")
 
 if len(backup) != PARTITION or backup[:8] != b"ANDROID!":
     raise SystemExit("backup is not the verified original recovery image")
@@ -87,6 +94,7 @@ if used_end > PARTITION:
     raise SystemExit("boot image components exceed recovery partition")
 print(f"image_sha256={hashlib.sha256(image).hexdigest()}")
 print(f"kernel_bytes={kernel_size} loader=0x40008000 ramdisk=0x44000000 compressed={compressed} expanded={expanded}")
+print(f"XNU_entry_va={entry_va:#x} XNU_entry_pa={entry_pa:#x} cold_entry=physical/MMU-off")
 print(f"staging=[0x{stage_lo:08x},0x{stage_hi:08x}) XNU_RAM=[0x{payload_phys:08x},0x{payload_phys+payload_size:08x})")
 print(f"dtb_offset={dtb_off:#x} dtb_bytes={dt_size} dtb_sha256={hashlib.sha256(dtb).hexdigest()}")
 print(f"partition_used_end={used_end:#x} partition_limit={PARTITION:#x}")

@@ -1,6 +1,5 @@
-/* Freestanding second stage for J2 Prime; physically linked at 0x84004000. */
+/* Freestanding second stage for J2 Prime; recovery image entry is 0x40008000. */
 #include <stdint.h>
-#include "boot_mmu.h"
 #include "ramoops_marker.h"
 #include "framebuffer_mark.h"
 #include "lz4_block.h"
@@ -11,9 +10,6 @@
 #define FB_BYTES 0x001fe000ULL
 #define FB_STRIDE 2176ULL
 #define PAGE 4096ULL
-#define IDENTITY_END 0x85000000ULL
-#define LOADER_MAP_BASE 0x40000000ULL
-#define LOADER_MAP_END  0x42000000ULL
 #define MAX_SEGS 32
 #define BOOT_LINE 608
 #ifndef J2_DIAGNOSTIC_HALT
@@ -43,8 +39,8 @@ _Static_assert(__builtin_offsetof(struct payload, segs) == 0x2a8, "payload heade
 _Static_assert(__builtin_offsetof(struct boot_args, video) == 40, "boot_args video offset");
 _Static_assert(__builtin_offsetof(struct boot_args, cmdline) == 108, "boot_args command line offset");
 _Static_assert(sizeof(struct boot_args) == 736, "boot_args v2 layout");
-extern void j2_enter_xnu(uint64_t entry_va, uint64_t boot_args_pa,
-			 uint64_t ttbr0_pa, uint64_t ttbr1_pa) __attribute__((noreturn));
+extern void j2_enter_xnu(uint64_t entry_pa, uint64_t boot_args_pa)
+	__attribute__((noreturn));
 
 static int eq8(const char *a, const char *b) { for (int i=0;i<8;i++) if(a[i]!=b[i]) return 0; return 1; }
 static int add_ok(uint64_t a,uint64_t b,uint64_t *r) { *r=a+b; return *r>=a; }
@@ -131,36 +127,28 @@ void j2_loader_main(void) {
     if (!add_ok(adt_pa,p->adt_size,&adt_end_pa) || !add_ok(adt_end_pa,PAGE-1,&ba_pa)) halt(0xffff0000U);
     ba_pa &= ~(PAGE-1);
     uint64_t ba_end=ba_pa+PAGE;
-    uint64_t tables_pa=ba_end, tables_end=tables_pa+J2_TABLE_BYTES;
-    if (ba_end>RAM_BASE+RAM_SIZE || tables_end<tables_pa ||
-        tables_end>RAM_BASE+RAM_SIZE || adt_pa<max_end ||
+    if (ba_end>RAM_BASE+RAM_SIZE || adt_pa<max_end ||
         (adt_pa<payload_end && J2_STAGE_BASE<adt_end_pa) ||
         (ba_pa<payload_end && J2_STAGE_BASE<ba_end) ||
-        (ba_pa<adt_end_pa && adt_pa<ba_end) ||
-        (tables_pa<adt_end_pa && adt_pa<tables_end) ||
-        (tables_pa<payload_end && J2_STAGE_BASE<tables_end)) halt(0x1001U);
+        (ba_pa<adt_end_pa && adt_pa<ba_end)) halt(0x1001U);
     bytes_copy((uint8_t *)adt_pa,payload+p->adt_off,p->adt_size);
     clean_invalidate_dcache(adt_pa,p->adt_size);
     bytes_zero((uint8_t *)ba_pa,PAGE);
     struct boot_args *ba=(struct boot_args *)ba_pa;
     ba->rev=2; ba->ver=2; ba->virt=p->virt; ba->phys=p->phys; ba->memsize=p->mem_size;
-    ba->top=tables_end; ba->video.base=FB_BASE; ba->video.display=1; ba->video.rowbytes=FB_STRIDE;
+    ba->top=ba_end; ba->video.base=FB_BASE; ba->video.display=1; ba->video.rowbytes=FB_STRIDE;
     ba->video.width=540; ba->video.height=960; ba->video.depth=32;
     if (!pa_to_va(adt_pa,p->phys,p->virt,&ba->dt)) halt(0xffff0000U);
     ba->dtlen=(uint32_t)p->adt_size; ba->actual=p->mem_size;
     const char cmdline[]="debug=0xc cpus=1 keepsyms=1";
     for (uint32_t i=0;i<sizeof(cmdline);i++) ba->cmdline[i]=cmdline[i];
     clean_invalidate_dcache(ba_pa,PAGE);
-    if (!j2_build_boot_tables((volatile uint64_t *)tables_pa, tables_pa,
-                              p->virt, p->phys, p->mem_size, IDENTITY_END,
-                              LOADER_MAP_BASE, LOADER_MAP_END))
-        halt(0x1002U);
-    clean_invalidate_dcache(tables_pa,J2_TABLE_BYTES);
     j2_ramoops_mark(J2_STAGE_LOADER_READY, 0, 0, 0);
 	j2_framebuffer_mark(J2_SCREEN_LOADER_READY);
 #if J2_DIAGNOSTIC_HALT
     for (;;) __asm__ volatile("wfe");
 #endif
     j2_ramoops_mark(J2_STAGE_XNU_CALL, 0, 0, 0);
-    j2_enter_xnu(p->entry, ba_pa, tables_pa, tables_pa + 2 * PAGE);
+	j2_framebuffer_mark(J2_SCREEN_XNU_HANDOFF);
+	j2_enter_xnu(entry_pa, ba_pa);
 }

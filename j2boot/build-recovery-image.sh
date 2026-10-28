@@ -21,9 +21,6 @@ python3 "$ROOT/tools/verify_recovery_bootshim.py" \
 cc -std=c11 -Wall -Wextra -Werror -I"$ROOT/j2boot" \
   "$ROOT/j2boot/test_framebuffer_mark.c" -o "$BUILD/test-framebuffer-mark"
 "$BUILD/test-framebuffer-mark"
-cc -std=c11 -Wall -Wextra -Werror -I"$ROOT/j2boot" \
-  "$ROOT/j2boot/test_boot_mmu.c" -o "$BUILD/test-boot-mmu"
-"$BUILD/test-boot-mmu"
 cc -std=c11 -Wall -Wextra -Werror -DJ2_RAMOOPS_TEST -I"$ROOT/j2boot" \
   "$ROOT/j2boot/ramoops_marker.c" "$ROOT/j2boot/test_ramoops_marker.c" \
   -o "$BUILD/test-ramoops-marker"

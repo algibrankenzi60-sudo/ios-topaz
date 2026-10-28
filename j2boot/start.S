@@ -125,31 +125,24 @@ _start:
 	b	.Lunsupported_el
 .size _start, .-_start
 
-/* x0=kernel entry VA, x1=boot_args PA, x2=TTBR0 PA, x3=TTBR1 PA. */
+/* Enter Apple's cold-boot entry at its physical address with MMU disabled. */
 .global j2_enter_xnu
 .type j2_enter_xnu, %function
 j2_enter_xnu:
 	mov	x9, x0
 	mov	x10, x1
-	mov	x11, x2
-	mov	x12, x3
-	ldr	x0, =0x22a519a519       /* XNU 4K, 39-bit VA, 40-bit PA TCR */
-	msr	TCR_EL1, x0
-	mov	x0, #0xff
-	msr	MAIR_EL1, x0
-	msr	TTBR0_EL1, x11
-	msr	TTBR1_EL1, x12
+	/* XNU start.s computes physical addresses from PC-relative symbols here,
+	 * builds its own bootstrap tables, and only then enables the MMU. */
 	dsb	sy
-	tlbi	vmalle1
+	mrs	x0, SCTLR_EL1
+	mov	x1, #0x1005             /* M | C | I */
+	bic	x0, x0, x1
+	msr	SCTLR_EL1, x0
 	dsb	sy
 	isb
 	ic	iallu
 	dsb	sy
 	isb
-	ldr	x0, =0x3454593d          /* XNU 8796 SCTLR_EL1_DEFAULT (A53) */
-	msr	SCTLR_EL1, x0
-	dsb	sy
-	isb
-	mov	x0, x10                  /* XNU boot protocol: x0 = boot_args PA */
-	br	x9                      /* enter XNU at its mapped high VA */
+	mov	x0, x10                  /* XNU cold-boot ABI: x0 = boot_args PA */
+	br	x9                      /* XNU physical entry; it creates its own MMU */
 .size j2_enter_xnu, .-j2_enter_xnu

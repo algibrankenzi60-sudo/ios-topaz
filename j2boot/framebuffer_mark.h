@@ -4,6 +4,7 @@
 #define J2_SCREEN_ARM64_ENTRY 1
 #define J2_SCREEN_LOADER_READY 2
 #define J2_SCREEN_LOADER_REJECT 3
+#define J2_SCREEN_XNU_HANDOFF 4
 #define J2_FB_WIDTH 540U
 #define J2_FB_HEIGHT 960U
 #define J2_FB_STRIDE_PIXELS 544U
@@ -29,6 +30,8 @@ static inline void j2_framebuffer_render(volatile uint32_t *fb, uint32_t stage)
 					pixel = 0xffffffffU;
 			} else if (stage == J2_SCREEN_LOADER_READY) {
 				pixel = 0xff00ff00U;
+			} else if (stage == J2_SCREEN_XNU_HANDOFF) {
+				pixel = 0xffffffffU;
 			} else {
 				pixel = 0xff0000ffU;
 			}
