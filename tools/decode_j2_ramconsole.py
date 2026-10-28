@@ -22,11 +22,20 @@ def main() -> int:
         print(f"usage: {sys.argv[0]} [last_kmsg.txt]", file=sys.stderr)
         return 2
     text = Path(sys.argv[1]).read_text(errors="replace") if len(sys.argv) == 2 else sys.stdin.read()
+    exception_lines = re.findall(
+        r"J2XNU EXC phase=([0-9a-fA-F]{16}) ESR=([0-9a-fA-F]{16}) "
+        r"ELR=([0-9a-fA-F]{16}) FAR=([0-9a-fA-F]{16}) SPSR=([0-9a-fA-F]{16})",
+        text,
+    )
+    for phase, esr, elr, far, spsr in exception_lines:
+        print(f"J2 XNU exception phase=0x{phase} ESR=0x{esr} "
+              f"ELR=0x{elr} FAR=0x{far} SPSR=0x{spsr}")
     match = re.search(r"fiq step\s+(\d+)", text, re.IGNORECASE)
-    if match is None:
-        print("No RAM-console fiq_step line found", file=sys.stderr)
+    if match is None and not exception_lines:
+        print("No J2 RAM-console marker or exception line found", file=sys.stderr)
         return 1
-    print(describe(int(match.group(1))))
+    if match is not None:
+        print(describe(int(match.group(1))))
     return 0
 
 

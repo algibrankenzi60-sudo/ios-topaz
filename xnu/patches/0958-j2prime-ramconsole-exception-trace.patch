@@ -30,7 +30,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/osfmk/arm64/j2prime_ramconsole.c
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,208 @@
 +/* J2 Prime early progress/exception marker in Samsung's reserved RAM console. */
 +#include "j2prime_ramconsole.h"
 +
@@ -102,6 +102,77 @@ index 0000000..0000000
 +#endif
 +}
 +
++static uint32_t
++j2_append_console_line(uintptr_t base, const char *line, uint32_t length)
++{
++	volatile struct j2_ramconsole_header *h =
++	    (volatile struct j2_ramconsole_header *)base;
++	if (j2_ramconsole_reason(base) == 0 || length == 0 ||
++	    h->log_start != h->log_size || h->log_size > h->sz_console ||
++	    length > h->sz_console - h->log_size) {
++		return 0;
++	}
++	volatile char *out = (volatile char *)(base + h->off_console + h->log_start);
++	for (uint32_t i = 0; i < length; ++i) {
++		out[i] = line[i];
++	}
++#if defined(__aarch64__)
++	__asm__ volatile("dsb sy" ::: "memory");
++#else
++	__atomic_thread_fence(__ATOMIC_SEQ_CST);
++#endif
++	/* Publish size first so an interrupted update still has a valid header. */
++	h->log_size += length;
++#if defined(__aarch64__)
++	__asm__ volatile("dsb sy" ::: "memory");
++#else
++	__atomic_thread_fence(__ATOMIC_SEQ_CST);
++#endif
++	h->log_start += length;
++#if defined(__aarch64__)
++	__asm__ volatile("dsb sy" ::: "memory");
++#else
++	__atomic_thread_fence(__ATOMIC_SEQ_CST);
++#endif
++	return 1;
++}
++
++static uint32_t
++j2_append_string(char *out, uint32_t offset, const char *text)
++{
++	while (*text) out[offset++] = *text++;
++	return offset;
++}
++
++static uint32_t
++j2_append_hex64(char *out, uint32_t offset, uint64_t value)
++{
++	static const char digits[] = "0123456789abcdef";
++	for (int shift = 60; shift >= 0; shift -= 4) {
++		out[offset++] = digits[(value >> shift) & 0xfu];
++	}
++	return offset;
++}
++
++static uint32_t
++j2_format_exception(char *out, uint32_t phase, uint64_t esr,
++    uint64_t elr, uint64_t far, uint64_t spsr)
++{
++	uint32_t n = 0;
++	n = j2_append_string(out, n, "J2XNU EXC phase=");
++	n = j2_append_hex64(out, n, phase);
++	n = j2_append_string(out, n, " ESR=");
++	n = j2_append_hex64(out, n, esr);
++	n = j2_append_string(out, n, " ELR=");
++	n = j2_append_hex64(out, n, elr);
++	n = j2_append_string(out, n, " FAR=");
++	n = j2_append_hex64(out, n, far);
++	n = j2_append_string(out, n, " SPSR=");
++	n = j2_append_hex64(out, n, spsr);
++	out[n++] = '\n';
++	return n;
++}
++
 +void
 +j2prime_ramconsole_mark(uint32_t stage)
 +{
@@ -154,12 +225,12 @@ index 0000000..0000000
 +    uint64_t far, uint64_t spsr)
 +{
 +	uint32_t phase = j2prime_early_exception_phase & 0xffu;
-+	/* /proc/last_kmsg prints exception class and last phase in fiq_step. */
++	char line[128];
++	/* The header marker always survives; full registers append only into free ring space. */
 +	j2_store_marker((uintptr_t)J2_RAMCONSOLE_BASE,
 +	    j2_exception_marker(esr, phase));
-+	(void)elr;
-+	(void)far;
-+	(void)spsr;
++	uint32_t length = j2_format_exception(line, phase, esr, elr, far, spsr);
++	(void)j2_append_console_line((uintptr_t)J2_RAMCONSOLE_BASE, line, length);
 +	for (;;) {
 +		__asm__ volatile("wfi" ::: "memory");
 +	}

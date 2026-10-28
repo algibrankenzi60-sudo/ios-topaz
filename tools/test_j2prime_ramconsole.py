@@ -95,6 +95,34 @@ int main(void) {{
 
     assert(j2_exception_marker((uint64_t)0x24 << 26, 35) == 0x4a2e2423u);
     assert(J2_RAMCONSOLE_BASE + J2_RAMCONSOLE_SIZE == 0x43f10000ULL);
+
+    /* Append only to a non-wrapped tail; existing Samsung log stays intact. */
+    h->sig = J2_RAMCONSOLE_SIG;
+    h->off_linux = 512;
+    h->off_console = 832;
+    h->sz_console = J2_RAMCONSOLE_SIZE - h->off_console;
+    h->log_start = h->log_size = 17;
+    memcpy(mem + h->off_console, "preserved-log!!", 15);
+    char line[128];
+    uint32_t n = j2_format_exception(line, 35, 0x96000004ULL,
+        0xfffffff012345678ULL, 0x43f00000ULL, 0x3c5ULL);
+    assert(n < sizeof(line));
+    assert(j2_append_console_line((uintptr_t)mem, line, n) == 1);
+    assert(h->log_size == 17 + n && h->log_start == 17 + n);
+    assert(memcmp(mem + h->off_console, "preserved-log!!", 15) == 0);
+    assert(memcmp(mem + h->off_console + 17, line, n) == 0);
+    assert(memcmp(line, "J2XNU EXC phase=0000000000000023 ESR=", 37) == 0);
+
+    /* Wrapped/full rings and insufficient capacity must not be modified. */
+    h->log_start = 4; h->log_size = 17;
+    memcpy(before, mem, sizeof(mem));
+    assert(j2_append_console_line((uintptr_t)mem, line, n) == 0);
+    assert(memcmp(mem, before, sizeof(mem)) == 0);
+    h->log_start = h->sz_console;
+    h->log_size = h->sz_console;
+    memcpy(before, mem, sizeof(mem));
+    assert(j2_append_console_line((uintptr_t)mem, line, n) == 0);
+    assert(memcmp(mem, before, sizeof(mem)) == 0);
     return 0;
 }}
 ''')
