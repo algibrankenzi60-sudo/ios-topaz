@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 patch = (ROOT / 'xnu/patches/0954-j2prime-pstore-vm-checkpoints.patch').read_text()
 order_patch = (ROOT / 'xnu/patches/0955-j2prime-relocate-diagnostics-after-tlb.patch').read_text()
 fb_patch = (ROOT / 'xnu/patches/0956-j2prime-relocate-framebuffer-before-diagnostics.patch').read_text()
+ttbr0_patch = (ROOT / 'xnu/patches/0957-j2prime-retain-bootstrap-ttbr0.patch').read_text()
 
 L2_SIZE = 2 * 1024 * 1024
 FB_VA_OFFSET = 1 * L2_SIZE
@@ -62,4 +63,14 @@ fb_added = [line[1:] for line in fb_patch.splitlines() if line.startswith('+')]
 fb_pointer = next(i for i, line in enumerate(fb_added) if 'early_fb = (volatile uint32_t *)(uintptr_t)base;' in line)
 fb_marker8 = next(i for i, line in enumerate(fb_added) if 'sweet_early_mark(8, \"post-TTBR0 framebuffer alias\")' in line)
 assert fb_pointer < fb_marker8
-print('J2 ramoops alias and post-TLB framebuffer relocation ordering checks passed')
+
+# For J2 bring-up only, retain the bootstrap TTBR0 through this boundary.
+# SWEET's normal invalid-TTBR0 + TLB-flush path must remain unchanged.
+assert '#if !defined(J2PRIME)\n' in ttbr0_patch
+guarded = ttbr0_patch.split('#if !defined(J2PRIME)\n', 1)[1].split('#endif', 1)[0]
+assert '\tset_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);' in guarded
+assert '\tflush_mmu_tlb();' in guarded
+assert '+\tsweet_early_mark(28, "replacement TTBR1 aliases active; TTBR0 retained");' in ttbr0_patch
+assert '+\tsweet_early_mark(10, "J2 bootstrap TTBR0 retained for bring-up");' in ttbr0_patch
+assert 'TTBR0 must be retired after this transition' in ttbr0_patch
+print('J2 aliases, relocation ordering, and targeted TTBR0 workaround checks passed')

@@ -1,0 +1,39 @@
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -2288,11 +2288,20 @@
+ 	/* The final TTBR1 is live; leave the outgoing VA=PA framebuffer alias. */
+ 	sweet_early_relocate(SWEET_EARLY_FB_VA);
+ #endif
++#if !defined(J2PRIME)
+ 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
+ 
+ 	flush_mmu_tlb();
++#endif
+ #if defined(J2PRIME)
+-	/* Both diagnostic aliases switch only after the new tables and TLB are active. */
++	/*
++	 * Bring-up workaround: retain the known-good bootstrap TTBR0 while
++	 * validating that the replacement TTBR1 and both device-RAM aliases are
++	 * usable. The prior image stopped immediately after marker 27, at the
++	 * TTBR0 replacement/TLB invalidation boundary. Do not use this mode as a
++	 * production configuration; TTBR0 must be retired after this transition
++	 * is independently verified.
++	 */
+ 	if (j2_early_ramoops_mapped) {
+ 		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
+ 	} else {
+@@ -2303,10 +2312,10 @@
+ 	} else {
+ 		sweet_early_disable();
+ 	}
+-#endif
++	sweet_early_mark(10, "J2 bootstrap TTBR0 retained for bring-up");
++	sweet_early_mark(28, "replacement TTBR1 aliases active; TTBR0 retained");
++#else
+ 	sweet_early_mark(10, "TTBR0 off; TLB flushed");
+-#if defined(J2PRIME)
+-	sweet_early_mark(28, "low translation table retired");
+ #endif
+ 	kva_active = TRUE;
+ 	// global table pointers may need to be different due to physical aperture remapping
