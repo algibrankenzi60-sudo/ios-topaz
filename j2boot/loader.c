@@ -10,6 +10,8 @@
 #define FB_STRIDE 2176ULL
 #define PAGE 4096ULL
 #define IDENTITY_END 0x85000000ULL
+#define LOADER_MAP_BASE 0x40000000ULL
+#define LOADER_MAP_END  0x42000000ULL
 #define MAX_SEGS 32
 #define BOOT_LINE 608
 #ifndef J2_DIAGNOSTIC_HALT
@@ -133,7 +135,8 @@ void j2_loader_main(void) {
     for (uint32_t i=0;i<sizeof(cmdline);i++) ba->cmdline[i]=cmdline[i];
     clean_invalidate_dcache(ba_pa,PAGE);
     if (!j2_build_boot_tables((volatile uint64_t *)tables_pa, tables_pa,
-                              p->virt, p->phys, p->mem_size, IDENTITY_END))
+                              p->virt, p->phys, p->mem_size, IDENTITY_END,
+                              LOADER_MAP_BASE, LOADER_MAP_END))
         halt(0x1002U);
     clean_invalidate_dcache(tables_pa,J2_TABLE_BYTES);
     j2_ramoops_mark(J2_STAGE_LOADER_READY, 0, 0, 0);

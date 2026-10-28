@@ -47,9 +47,9 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
     boot_args_pa = align(adt_end_pa, PAGE)
     boot_args_end = boot_args_pa + PAGE
     tables_pa = boot_args_end
-    tables_end = tables_pa + 4 * PAGE
+    tables_end = tables_pa + 5 * PAGE
     if tables_end > pa + length:
-        raise ValueError('kernel, ADT, boot_args, and four bootstrap tables exceed the audited RAM window')
+        raise ValueError('kernel, ADT, boot_args, and five bootstrap tables exceed the audited RAM window')
     # The package is loaded just above the proven MT6737 shim AArch64 entry.
     # Conservative bound: the complete 16 MiB recovery image's initial 16 KiB
     # holds the shim, leaving the remaining range below 0x41000000 for payload.
@@ -86,6 +86,7 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
         'adt_physical_range': [hex(adt_pa), hex(adt_end_pa)],
         'boot_args_physical_range': [hex(boot_args_pa), hex(boot_args_end)],
         'bootstrap_tables_physical_range': [hex(tables_pa), hex(tables_end)],
+        'loader_identity_mapping': ['0x40000000', '0x42000000'],
         'remaining_ram_after_loader_data': hex(pa + length - tables_end),
         'adt_bytes': len(adt_blob), 'partition_limit_bytes': 16*1024*1024,
         'fits_partition_alone': len(out) <= 16*1024*1024,
