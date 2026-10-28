@@ -1,8 +1,8 @@
 /* Append early XNU checkpoints to an unused Samsung ramoops dmesg record. */
 #include "j2prime_ramoops.h"
 
-#define RECORD_BYTES  0x1000u
-#define RECORD_COUNT  190u
+#define RECORD_BYTES  J2_RAMOOPS_RECORD_BYTES
+#define RECORD_COUNT  J2_RAMOOPS_RECORD_COUNT
 #define HEADER_BYTES  12u
 #define DATA_BYTES    (RECORD_BYTES - HEADER_BYTES)
 #define BUFFER_SIG    0x43474244u /* persistent_ram: PERSISTENT_RAM_SIG ^ 0 */

@@ -6,14 +6,16 @@
 
 #include "j2prime_ramoops.h"
 
-#define RECORD_BYTES 0x1000u
-#define RECORD_COUNT 190u
+#define RECORD_BYTES J2_RAMOOPS_RECORD_BYTES
+#define RECORD_COUNT J2_RAMOOPS_RECORD_COUNT
+#define DMESG_BYTES J2_RAMOOPS_DMESG_BYTES
+#define RAMOOPS_BYTES J2_RAMOOPS_MEM_BYTES
 #define HEADER_BYTES 12u
 #define DATA_BYTES (RECORD_BYTES - HEADER_BYTES)
 #define BUFFER_SIG 0x43474244u
 
-static uint8_t region[RECORD_BYTES * RECORD_COUNT];
-static uint8_t full_region[RECORD_BYTES * RECORD_COUNT];
+static uint8_t region[RAMOOPS_BYTES];
+static uint8_t full_region[RAMOOPS_BYTES];
 
 static uint32_t *header_at(unsigned int slot)
 {
@@ -39,7 +41,12 @@ static int count_records(void)
 
 int main(void)
 {
+	assert(RECORD_COUNT == 190u);
+	assert(DMESG_BYTES == RECORD_BYTES * RECORD_COUNT);
+	assert(J2_RAMOOPS_PHYS_BASE == 0x43f10000ULL);
+	assert(J2_RAMOOPS_BLOCK_OFFSET == 0x10000ULL);
 	memset(region, 0, sizeof(region));
+	memset(region + DMESG_BYTES, 0xa5, RAMOOPS_BYTES - DMESG_BYTES);
 	j2prime_ramoops_mark(region, 21, "vm-init-enter");
 	j2prime_ramoops_mark(region, 22, "ram-range-ok");
 	j2prime_ramoops_mark(region, 27, "kernel-ttbr1-active");
@@ -48,6 +55,8 @@ int main(void)
 	assert(strstr(data_at(RECORD_COUNT - 1), "J2XNU/1\nJ2XNU:21:vm-init-enter\n"));
 	assert(strstr(data_at(RECORD_COUNT - 1), "J2XNU:22:ram-range-ok\n"));
 	assert(strstr(data_at(RECORD_COUNT - 1), "J2XNU:27:kernel-ttbr1-active\n"));
+	for (unsigned int i = DMESG_BYTES; i < RAMOOPS_BYTES; ++i)
+		assert(region[i] == 0xa5);
 
 	/* An occupied foreign record must remain byte-for-byte unchanged. */
 	uint8_t *foreign = region + (RECORD_COUNT - 2) * RECORD_BYTES;
@@ -61,6 +70,7 @@ int main(void)
 	assert(strstr(data_at(RECORD_COUNT - 1), "J2XNU:23:after-foreign\n"));
 
 	/* With every slot occupied by valid foreign records, write nothing. */
+	memset(full_region, 0, sizeof(full_region));
 	for (unsigned int i = 0; i < RECORD_COUNT; ++i) {
 		uint32_t *h = (uint32_t *)(full_region + i * RECORD_BYTES);
 		h[0] = BUFFER_SIG; h[1] = 0; h[2] = 1;

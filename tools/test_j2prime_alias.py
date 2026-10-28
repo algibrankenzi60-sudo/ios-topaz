@@ -13,6 +13,11 @@ FB_VA_OFFSET = 1 * L2_SIZE
 RAMOOPS_VA_OFFSET = 8 * L2_SIZE
 RAMOOPS_PHYS_BLOCK = 0x43F00000
 RAMOOPS_PHYS_OFFSET = 0x10000
+RAMOOPS_MEM_BYTES = 0xE0000
+RAMOOPS_RECORD_BYTES = 0x1000
+RAMOOPS_CONSOLE_BYTES = 0x10000
+RAMOOPS_FTRACE_BYTES = 0x1000
+RAMOOPS_PMSG_BYTES = 0x1000
 
 # The L2 table's first slot maps SWEET_EARLY_FB_VA. The ramoops pointer is
 # relocated to VM_MIN + 8 L2 blocks, so the table index must advance by seven.
@@ -21,12 +26,27 @@ assert slot_delta == 7
 mapped_va = FB_VA_OFFSET + slot_delta * L2_SIZE + RAMOOPS_PHYS_OFFSET
 expected_va = RAMOOPS_VA_OFFSET + RAMOOPS_PHYS_OFFSET
 assert mapped_va == expected_va
+assert RAMOOPS_PHYS_BLOCK + RAMOOPS_PHYS_OFFSET == 0x43F10000
+
+# Samsung's ramoops driver reserves two console buffers plus ftrace and pmsg
+# after dmesg records; derive the exact dmesg slot count from the driver layout.
+dmesg_bytes = (RAMOOPS_MEM_BYTES - 2 * RAMOOPS_CONSOLE_BYTES
+               - RAMOOPS_FTRACE_BYTES - RAMOOPS_PMSG_BYTES)
+record_count = dmesg_bytes // RAMOOPS_RECORD_BYTES
+assert (dmesg_bytes, record_count) == (0xBE000, 190)
 
 mapping_lines = [line[1:] for line in patch.splitlines()
                  if line.startswith('+') and 'const unsigned int ramoops_slot' in line]
 assert len(mapping_lines) == 1, mapping_lines
-assert re.search(r'J2_EARLY_RAMOOPS_VA\s*-\s*SWEET_EARLY_FB_VA', mapping_lines[0])
+assert re.search(r'J2_EARLY_RAMOOPS_BLOCK_VA\s*-\s*SWEET_EARLY_FB_VA', mapping_lines[0])
 assert not re.search(r'ramoops_slot\s*=\s*first\s*\+\s*3\b', patch)
+assert re.search(r'J2_EARLY_RAMOOPS_BLOCK_VA \(VM_MIN_KERNEL_ADDRESS \+ 8 \* ARM_TT_L2_SIZE\)', patch)
+assert re.search(r'J2_EARLY_RAMOOPS_VA \(J2_EARLY_RAMOOPS_BLOCK_VA \+ J2_RAMOOPS_BLOCK_OFFSET\)', patch)
+assert '#include <arm64/j2prime_ramoops.h>' in patch
+assert 'l2[ramoops_slot] = J2_RAMOOPS_PHYS_BLOCK | ARM_TTE_VALID' in patch
+assert 'MOV64\tx10, 0x43f00000' in patch
+assert 'J2_RAMOOPS_RECORD_COUNT' in patch
+assert 'RECORD_COUNT  J2_RAMOOPS_RECORD_COUNT' in patch
 
 # The diagnostics must keep the old pointers until the translation switch is complete.
 flush = order_patch.index('\tflush_mmu_tlb();')
