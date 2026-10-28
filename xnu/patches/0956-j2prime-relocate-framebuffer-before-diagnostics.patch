@@ -1,0 +1,21 @@
+diff --git a/osfmk/arm64/sweet_early.c b/osfmk/arm64/sweet_early.c
+index cd1eaf8..1d4bfee 100644
+--- a/osfmk/arm64/sweet_early.c
++++ b/osfmk/arm64/sweet_early.c
+@@ -153,9 +153,16 @@ sweet_early_panic(const char *fmt, va_list *args)
+ void
+ sweet_early_relocate(uint64_t base)
+ {
++#if defined(J2PRIME)
++	/* TTBR0 is already retired here; never log through the stale VA=PA pointer. */
++	early_fb = (volatile uint32_t *)(uintptr_t)base;
++	__asm__ volatile("dsb sy" ::: "memory");
++	sweet_early_mark(8, "post-TTBR0 framebuffer alias");
++#else
+ 	sweet_early_mark(8, "leaving bootstrap TTBR0");
+ 	early_fb = (volatile uint32_t *)(uintptr_t)base;
+ 	__asm__ volatile("dsb sy" ::: "memory");
++#endif
+ 	sweet_early_mark(9, "kernel framebuffer VA live");
+ }
+ 

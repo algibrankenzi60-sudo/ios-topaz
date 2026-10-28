@@ -6,6 +6,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 patch = (ROOT / 'xnu/patches/0954-j2prime-pstore-vm-checkpoints.patch').read_text()
 order_patch = (ROOT / 'xnu/patches/0955-j2prime-relocate-diagnostics-after-tlb.patch').read_text()
+fb_patch = (ROOT / 'xnu/patches/0956-j2prime-relocate-framebuffer-before-diagnostics.patch').read_text()
 
 L2_SIZE = 2 * 1024 * 1024
 FB_VA_OFFSET = 1 * L2_SIZE
@@ -37,4 +38,8 @@ added_lines = [line[1:] for line in order_patch.splitlines() if line.startswith(
 relocate = next(i for i, line in enumerate(added_lines) if 'sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);' in line)
 comment = next(i for i, line in enumerate(added_lines) if 'Both diagnostic aliases switch only after the new tables and TLB are active.' in line)
 assert relocate > comment
-print('J2 ramoops alias matches its physical mapping; diagnostic aliases relocate only after TLB flush')
+fb_added = [line[1:] for line in fb_patch.splitlines() if line.startswith('+')]
+fb_pointer = next(i for i, line in enumerate(fb_added) if 'early_fb = (volatile uint32_t *)(uintptr_t)base;' in line)
+fb_marker8 = next(i for i, line in enumerate(fb_added) if 'sweet_early_mark(8, \"post-TTBR0 framebuffer alias\")' in line)
+assert fb_pointer < fb_marker8
+print('J2 ramoops alias and post-TLB framebuffer relocation ordering checks passed')
