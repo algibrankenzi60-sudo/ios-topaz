@@ -1,6 +1,9 @@
-/* AArch64 stage entry and XNU MMU handoff. Physical execution at 0x84004000. */
+/* AArch64 stage entry and XNU MMU handoff; link address comes from the target linker script. */
 .section .text.start, "ax"
 #include "ramoops_marker.h"
+#ifndef J2_STACK_TOP
+#define J2_STACK_TOP 0x84006000
+#endif
 .global _start
 .type _start, %function
 
@@ -49,7 +52,8 @@ _start:
 .Lenter_el1:
 	msr	DAIFSet, #0xf
 	msr	SPSel, #1
-	ldr	x0, =0x80f00000
+	/* Each launch target supplies a stack outside its loader/package source. */
+	ldr	x0, =J2_STACK_TOP
 	mov	sp, x0
 	tlbi	vmalle1
 	dsb	sy
