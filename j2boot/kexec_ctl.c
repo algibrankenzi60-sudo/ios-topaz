@@ -23,7 +23,8 @@
 #define IMAGE_BASE 0x84000000UL
 #define IMAGE_ENTRY 0x84000000UL
 #define LOADER_BASE 0x84004000UL
-#define PACKAGE_BASE 0x84005000UL
+#define PACKAGE_BASE 0x84006000UL
+#define PACKAGE_OFFSET (PACKAGE_BASE - IMAGE_BASE)
 #define IMAGE_LIMIT 0x85000000UL
 #define PAGE_SIZE_J2 4096UL
 #define KEXEC_CMD 0x45584543UL
@@ -74,7 +75,7 @@ static int load_image(const char *path) {
     if (fseek(f, 0, SEEK_END) || (file_len = ftell(f)) < 0 || fseek(f, 0, SEEK_SET)) {
         perror("size image"); fclose(f); return 1;
     }
-    if ((unsigned long)file_len < 0x5000 || (unsigned long)file_len > IMAGE_LIMIT - IMAGE_BASE) {
+    if ((unsigned long)file_len < PACKAGE_OFFSET || (unsigned long)file_len > IMAGE_LIMIT - IMAGE_BASE) {
         fprintf(stderr, "refusing: image size %ld outside audited bounds\n", file_len);
         fclose(f); return 1;
     }
@@ -87,11 +88,11 @@ static int load_image(const char *path) {
     if (memcmp(buf + 4, "J2KEX001", 8) || le32(buf + 12) != IMAGE_BASE ||
         le32(buf + 16) != IMAGE_ENTRY || le32(buf + 20) != LOADER_BASE ||
         le32(buf + 24) != PACKAGE_BASE || le32(buf + 28) != IMAGE_LIMIT ||
-        memcmp(buf + 0x5000, "J2PRIME\0", 8)) {
+        memcmp(buf + PACKAGE_OFFSET, "J2PRIME\0", 8)) {
         fprintf(stderr, "refusing: image header, addresses, or embedded package do not match\n");
         goto out;
     }
-    if (le64(buf + 0x5000 + 0x48) > (uint64_t)file_len - 0x5000) {
+    if (le64(buf + PACKAGE_OFFSET + 0x48) > (uint64_t)file_len - PACKAGE_OFFSET) {
         fprintf(stderr, "refusing: embedded package length exceeds image\n");
         goto out;
     }

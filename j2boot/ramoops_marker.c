@@ -61,6 +61,18 @@ static const char *stage_text(uint32_t stage, uint32_t info0,
 	case J2_STAGE_XNU_CALL:
 		*length = sizeof("J2KEX:XNU_CALL\n") - 1;
 		return "J2KEX:XNU_CALL\n";
+	case J2_STAGE_LOADER_REJECT:
+	{
+		uint32_t offset = 0;
+		append(buffer, &offset, "J2KEX:LOADER_REJECT REASON=0x");
+		append_hex32(buffer, &offset, info0);
+		buffer[offset] = '\n';
+		*length = offset + 1;
+		return buffer;
+	}
+	case J2_STAGE_SMC_RETURNED:
+		*length = sizeof("J2KEX:SMC_RETURNED\n") - 1;
+		return "J2KEX:SMC_RETURNED\n";
 	default:
 		*length = 0;
 		return 0;

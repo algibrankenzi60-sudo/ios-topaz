@@ -1,6 +1,6 @@
-/* Freestanding second stage for the verified MT6737 AArch32->AArch64 shim.
- * Link at 0x40008000; package starts at the following 4 KiB boundary. */
+/* Freestanding second stage for J2 Prime; physically linked at 0x84004000. */
 #include <stdint.h>
+#include "boot_mmu.h"
 #include "ramoops_marker.h"
 
 #define RAM_BASE 0x80000000ULL
@@ -9,16 +9,17 @@
 #define FB_BYTES 0x001fe000ULL
 #define FB_STRIDE 2176ULL
 #define PAGE 4096ULL
+#define IDENTITY_END 0x85000000ULL
 #define MAX_SEGS 32
 #define BOOT_LINE 608
 #ifndef J2_DIAGNOSTIC_HALT
-#define J2_DIAGNOSTIC_HALT 1
+#define J2_DIAGNOSTIC_HALT 0
 #endif
 #ifndef J2_PAYLOAD_BASE
-#define J2_PAYLOAD_BASE 0x40009000ULL
+#define J2_PAYLOAD_BASE 0x84006000ULL
 #endif
 #ifndef J2_PAYLOAD_LIMIT
-#define J2_PAYLOAD_LIMIT 0x41000000ULL
+#define J2_PAYLOAD_LIMIT 0x85000000ULL
 #endif
 
 struct seg { uint64_t va, vs, off, fs; };
@@ -40,6 +41,8 @@ _Static_assert(__builtin_offsetof(struct boot_args, video) == 40, "boot_args vid
 _Static_assert(__builtin_offsetof(struct boot_args, cmdline) == 108, "boot_args command line offset");
 _Static_assert(sizeof(struct boot_args) == 736, "boot_args v2 layout");
 extern uint8_t _payload[];
+extern void j2_enter_xnu(uint64_t entry_va, uint64_t boot_args_pa,
+			 uint64_t ttbr0_pa, uint64_t ttbr1_pa) __attribute__((noreturn));
 
 static int eq8(const char *a, const char *b) { for (int i=0;i<8;i++) if(a[i]!=b[i]) return 0; return 1; }
 static int add_ok(uint64_t a,uint64_t b,uint64_t *r) { *r=a+b; return *r>=a; }
@@ -58,11 +61,10 @@ static void clean_invalidate_dcache(uint64_t addr,uint64_t len) {
         __asm__ volatile("dc civac, %0" :: "r"(p) : "memory");
     __asm__ volatile("dsb sy" ::: "memory");
 }
-static void screen(uint32_t c) {
-    volatile uint32_t *p=(volatile uint32_t *)FB_BASE;
-    for (uint64_t y=0;y<960;y++) for(uint64_t x=0;x<540;x++) p[y*(FB_STRIDE/4)+x]=c;
+static void halt(uint32_t reason) {
+    j2_ramoops_mark(J2_STAGE_LOADER_REJECT, reason, 0, 0);
+    for (;;) __asm__ volatile("wfe");
 }
-static void halt(uint32_t color) { screen(color); for (;;) __asm__ volatile("wfe"); }
 
 void j2_loader_main(void) {
     const struct payload *p=(const struct payload *)_payload;
@@ -110,32 +112,34 @@ void j2_loader_main(void) {
     if (!add_ok(adt_pa,p->adt_size,&adt_end_pa) || !add_ok(adt_end_pa,PAGE-1,&ba_pa)) halt(0xffff0000U);
     ba_pa &= ~(PAGE-1);
     uint64_t ba_end=ba_pa+PAGE;
-    if (ba_end>RAM_BASE+RAM_SIZE || adt_pa<max_end ||
+    uint64_t tables_pa=ba_end, tables_end=tables_pa+J2_TABLE_BYTES;
+    if (ba_end>RAM_BASE+RAM_SIZE || tables_end<tables_pa ||
+        tables_end>RAM_BASE+RAM_SIZE || adt_pa<max_end ||
         (adt_pa<payload_end && (uint64_t)_payload<adt_end_pa) ||
         (ba_pa<payload_end && (uint64_t)_payload<ba_end) ||
-        (ba_pa<adt_end_pa && adt_pa<ba_end)) halt(0xffff0000U);
+        (ba_pa<adt_end_pa && adt_pa<ba_end) ||
+        (tables_pa<adt_end_pa && adt_pa<tables_end) ||
+        (tables_pa<payload_end && (uint64_t)_payload<tables_end)) halt(0x1001U);
     bytes_copy((uint8_t *)adt_pa,_payload+p->adt_off,p->adt_size);
     clean_invalidate_dcache(adt_pa,p->adt_size);
     bytes_zero((uint8_t *)ba_pa,PAGE);
     struct boot_args *ba=(struct boot_args *)ba_pa;
     ba->rev=2; ba->ver=2; ba->virt=p->virt; ba->phys=p->phys; ba->memsize=p->mem_size;
-    ba->top=ba_end; ba->video.base=FB_BASE; ba->video.display=1; ba->video.rowbytes=FB_STRIDE;
+    ba->top=tables_end; ba->video.base=FB_BASE; ba->video.display=1; ba->video.rowbytes=FB_STRIDE;
     ba->video.width=540; ba->video.height=960; ba->video.depth=32;
     if (!pa_to_va(adt_pa,p->phys,p->virt,&ba->dt)) halt(0xffff0000U);
     ba->dtlen=(uint32_t)p->adt_size; ba->actual=p->mem_size;
     const char cmdline[]="debug=0xc cpus=1 keepsyms=1";
     for (uint32_t i=0;i<sizeof(cmdline);i++) ba->cmdline[i]=cmdline[i];
     clean_invalidate_dcache(ba_pa,PAGE);
+    if (!j2_build_boot_tables((volatile uint64_t *)tables_pa, tables_pa,
+                              p->virt, p->phys, p->mem_size, IDENTITY_END))
+        halt(0x1002U);
+    clean_invalidate_dcache(tables_pa,J2_TABLE_BYTES);
     j2_ramoops_mark(J2_STAGE_LOADER_READY, 0, 0, 0);
-    screen(0xff008000U);
 #if J2_DIAGNOSTIC_HALT
-    /* Stop after validated boot_args and its persistent marker, before entering
-     * an XNU image whose hardware boot is still unknown.
-     */
     for (;;) __asm__ volatile("wfe");
 #endif
     j2_ramoops_mark(J2_STAGE_XNU_CALL, 0, 0, 0);
-    __asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");
-    ((void (*)(uint64_t))entry_pa)(ba_pa);
-    halt(0xffff0000U);
+    j2_enter_xnu(p->entry, ba_pa, tables_pa, tables_pa + 2 * PAGE);
 }

@@ -5,6 +5,8 @@
 #define J2_STAGE_ARM64_ENTRY 2
 #define J2_STAGE_LOADER_READY 3
 #define J2_STAGE_XNU_CALL 4
+#define J2_STAGE_LOADER_REJECT 5
+#define J2_STAGE_SMC_RETURNED 6
 
 #ifndef __ASSEMBLER__
 #include <stdint.h>

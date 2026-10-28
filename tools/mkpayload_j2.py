@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build an OFFLINE diagnostic J2 Mach-O package (not a flashable image).
+"""Build an offline J2 Mach-O package for the RAM-only kexec loader.
 
 The J2PRIME magic is intentionally incompatible with the Topaz shim's SWEETXNU
 format. It embeds the real J2 ADT and 4 KiB aligned kernel segments, with strict
-bounds checks. A matching J2 loader is still required before device execution.
+bounds checks. The generated package is not itself a boot image or flash image.
 """
 import argparse, hashlib, json, os, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -46,8 +46,10 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
     adt_end_pa = adt_pa + len(adt_blob)
     boot_args_pa = align(adt_end_pa, PAGE)
     boot_args_end = boot_args_pa + PAGE
-    if boot_args_end > pa + length:
-        raise ValueError('kernel, ADT, and boot_args exceed the audited RAM window')
+    tables_pa = boot_args_end
+    tables_end = tables_pa + 4 * PAGE
+    if tables_end > pa + length:
+        raise ValueError('kernel, ADT, boot_args, and four bootstrap tables exceed the audited RAM window')
     # The package is loaded just above the proven MT6737 shim AArch64 entry.
     # Conservative bound: the complete 16 MiB recovery image's initial 16 KiB
     # holds the shim, leaving the remaining range below 0x41000000 for payload.
@@ -73,7 +75,7 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
     struct.pack_into('<Q', out, 0x48, len(out))
     for i, seg in enumerate(table): struct.pack_into('<4Q', out, HDR + i*32, *seg)
     report = {
-        'status': 'OFFLINE_DIAGNOSTIC_ONLY; matching loader source exists but hardware boot is unverified',
+        'status': 'OFFLINE_PACKAGE; device execution remains unverified',
         'kernel_sha256': hashlib.sha256(open(kernel_path,'rb').read()).hexdigest(),
         'payload_sha256': hashlib.sha256(out).hexdigest(), 'payload_bytes': len(out),
         'format': 'J2PRIME v1, 4 KiB pages', 'segments': len(pieces), 'chained_fixups_applied': fixups,
@@ -83,7 +85,8 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
         'kernel_footprint_from_phys_base': hex((kernel_end - virt_base)),
         'adt_physical_range': [hex(adt_pa), hex(adt_end_pa)],
         'boot_args_physical_range': [hex(boot_args_pa), hex(boot_args_end)],
-        'remaining_ram_after_kernel_and_boot_args': hex(pa + length - boot_args_end),
+        'bootstrap_tables_physical_range': [hex(tables_pa), hex(tables_end)],
+        'remaining_ram_after_loader_data': hex(pa + length - tables_end),
         'adt_bytes': len(adt_blob), 'partition_limit_bytes': 16*1024*1024,
         'fits_partition_alone': len(out) <= 16*1024*1024,
     }
@@ -91,7 +94,7 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
 
 if __name__ == '__main__':
     ap=argparse.ArgumentParser(); ap.add_argument('kernel'); ap.add_argument('adt'); ap.add_argument('out'); ap.add_argument('--report')
-    ap.add_argument('--source-window', nargs=2, type=lambda x: int(x, 0), default=(0x40008000, 0x41000000), metavar=('START','END'))
+    ap.add_argument('--source-window', nargs=2, type=lambda x: int(x, 0), default=(0x84006000, 0x85000000), metavar=('START','END'))
     a=ap.parse_args(); blob,report=build(a.kernel,a.adt,tuple(a.source_window))
     open(a.out,'wb').write(blob)
     text=json.dumps(report,indent=2)+'\n'
