@@ -50,14 +50,12 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
     tables_end = tables_pa + 5 * PAGE
     if tables_end > pa + length:
         raise ValueError('kernel, ADT, boot_args, and five bootstrap tables exceed the audited RAM window')
-    # The package is loaded just above the proven MT6737 shim AArch64 entry.
-    # Conservative bound: the complete 16 MiB recovery image's initial 16 KiB
-    # holds the shim, leaving the remaining range below 0x41000000 for payload.
+    # The compressed container lives in the Android ramdisk. The loader expands
+    # this package to a bounded staging window immediately below XNU's first
+    # physical segment; validate this source window after the final size is known.
     src_lo, src_hi = source_window
     if src_lo >= src_hi:
         raise ValueError('invalid package source window')
-    if pa < src_hi and pa + length > src_lo:
-        raise ValueError('kernel RAM overlaps the shim/payload load window')
     pieces = []
     for s in segs:
         data = bytes(image[s['fileoff']:s['fileoff'] + s['filesize']])
@@ -70,6 +68,12 @@ def build(kernel_path, adt_path, source_window=(0x40008000, 0x41000000)):
     adt_off=len(out); out += adt_blob; out += bytes(-len(out) & 15)
     if src_lo + len(out) > src_hi:
         raise ValueError(f'package [{src_lo:#x},{src_lo+len(out):#x}) exceeds source window ending at {src_hi:#x}')
+    for va, vs, _, name in pieces:
+        dst_lo, dst_hi = va + bias, va + bias + vs
+        if src_lo < dst_hi and dst_lo < src_lo + len(out):
+            raise ValueError(f'staging package overlaps {name}: [{src_lo:#x},{src_lo+len(out):#x}) vs [{dst_lo:#x},{dst_hi:#x})')
+    if src_lo < tables_end and kernel_end_pa < src_lo + len(out):
+        raise ValueError('staging package overlaps XNU end, ADT, boot_args, or bootstrap tables')
     struct.pack_into('<8sII', out, 0, MAGIC, 1, len(pieces))
     struct.pack_into('<7Q', out, 0x10, virt_base, m['entry'], adt_off, len(adt_blob), kernel_end, pa, length)
     struct.pack_into('<Q', out, 0x48, len(out))

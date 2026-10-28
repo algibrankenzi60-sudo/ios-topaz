@@ -1,6 +1,7 @@
 /* AArch64 stage entry and XNU MMU handoff; link address comes from the target linker script. */
 .section .text.start, "ax"
 #include "ramoops_marker.h"
+#include "framebuffer_mark.h"
 #ifndef J2_STACK_TOP
 #define J2_STACK_TOP 0x84006000
 #endif
@@ -65,6 +66,8 @@ _start:
 	mov	w2, w20                  /* original SCTLR_EL1 */
 	mov	w3, w21                  /* original SCTLR_EL2, or zero at EL1 */
 	bl	j2_ramoops_mark
+	mov	w0, #J2_SCREEN_ARM64_ENTRY
+	bl	j2_framebuffer_mark
 	bl	j2_loader_main
 .Lhang:
 	wfe

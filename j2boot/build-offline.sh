@@ -7,17 +7,16 @@ BUILD="${1:-$ROOT/j2boot/out}"
 SHIM="/mnt/d/J2-iOS-audit-20261027/bootshim-build/bootshim-padded.bin"
 KERNEL="/tmp/xnu-kernel-782ea05/kernel.development.j2prime"
 STACK_TOP=0x41000000
-PAYLOAD_BASE=0x4000a000
-PAYLOAD_LIMIT=0x41000000
 mkdir -p "$BUILD"
 to_win() { wslpath -w "$1"; }
 ROOT_W="$(to_win "$ROOT")"; BUILD_W="$(to_win "$BUILD")"
 "$CC" --target=aarch64-none-elf -fuse-ld=lld -ffreestanding -fno-builtin -fno-stack-protector \
   -mgeneral-regs-only -mstrict-align -O2 -Wall -Wextra -Werror -nostdlib \
-  -DJ2_STACK_TOP="$STACK_TOP" -DJ2_PAYLOAD_BASE="${PAYLOAD_BASE}ULL" -DJ2_PAYLOAD_LIMIT="${PAYLOAD_LIMIT}ULL" \
+  -DJ2_STACK_TOP="$STACK_TOP" \
   -Wl,-T,"$ROOT_W\\j2boot\\loader-recovery.ld" \
   -Wl,--build-id=none "$ROOT_W\\j2boot\\start.S" "$ROOT_W\\j2boot\\loader.c" \
-  "$ROOT_W\\j2boot\\ramoops_marker.c" -o "$BUILD_W\\loader.elf"
+  "$ROOT_W\\j2boot\\ramoops_marker.c" "$ROOT_W\\j2boot\\framebuffer_mark.c" \
+  "$ROOT_W\\j2boot\\lz4_block.c" -o "$BUILD_W\\loader.elf"
 python3 - "$BUILD/loader.elf" "$BUILD/loader.bin" <<'PY'
 import struct,sys
 b=open(sys.argv[1],'rb').read()
@@ -45,31 +44,21 @@ IOMEM_ARGS=()
 if [[ -n "${J2_IOMEM:-}" ]]; then IOMEM_ARGS=(--iomem "$J2_IOMEM"); fi
 python3 "$ROOT/tools/mkadt_j2.py" "$BUILD/j2prime.adt" --audit-json "$BUILD/ram-audit.json" "${IOMEM_ARGS[@]}"
 python3 "$ROOT/tools/mkpayload_j2.py" "$KERNEL" "$BUILD/j2prime.adt" "$BUILD/j2prime.payload" \
-  --source-window "$PAYLOAD_BASE" "$PAYLOAD_LIMIT" --report "$BUILD/payload-report.json"
-python3 - "$SHIM" "$BUILD/loader-padded.bin" "$BUILD/j2prime.payload" "$BUILD/j2prime-recovery-kernel.bin" <<'PY'
+  --source-window 0x80000000 0x81000000 --report "$BUILD/payload-report.json"
+python3 - "$SHIM" "$BUILD/loader-padded.bin" "$BUILD/j2prime-recovery-kernel.bin" <<'PY'
 import sys
-shim,loader,payload=(open(x,'rb').read() for x in sys.argv[1:4])
-out=sys.argv[4]
+shim,loader=(open(x,'rb').read() for x in sys.argv[1:3])
+out=sys.argv[3]
 if len(shim)!=16384: raise SystemExit('unexpected MT6737 shim size')
 if len(loader)!=8192: raise SystemExit(f'loader must occupy fixed 8 KiB window, got {len(loader)}')
-image=shim+loader+payload
-limit=16*1024*1024
-if len(image)>limit: raise SystemExit(f'combined image exceeds recovery partition: {len(image)} > {limit}')
-base=0x40004000+len(shim)+len(loader)
-if base!=0x4000a000: raise SystemExit(f'payload address mismatch: {base:#x}')
-end=0x40004000+len(image)
-if end>0x41000000-0x10000: raise SystemExit(f'payload overlaps the 64 KiB loader stack reserve: end={end:#x}')
+image=shim+loader
 open(out,'wb').write(image)
 check=open(out,'rb').read()
 if check[:len(shim)]!=shim or check[len(shim):len(shim)+len(loader)]!=loader:
     raise SystemExit('combined image component verification failed')
-at=len(shim)+len(loader)
-if check[at:at+8]!=b'J2PRIME\0': raise SystemExit('payload magic missing at loader-declared boundary')
-total=int.from_bytes(check[at+0x48:at+0x50],'little')
-if total!=len(payload) or check[at:at+total]!=payload: raise SystemExit('embedded payload size/content mismatch')
 import hashlib
 print('recovery_kernel_bytes:',len(image),'sha256:',hashlib.sha256(check).hexdigest(),
       'kernel_load_address: 0x40004000','loader_entry: 0x40008000',
-      'payload_address:',hex(base),'stack_top: 0x41000000',
-      'partition_limit:',limit,'status: OFFLINE ONLY; NOT FOR FLASH')
+      'ramdisk_container_address: 0x44000000','staging_address: 0x80000000',
+      'stack_top: 0x41000000','status: OFFLINE ONLY; NOT FOR FLASH')
 PY

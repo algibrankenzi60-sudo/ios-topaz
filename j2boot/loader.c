@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include "boot_mmu.h"
 #include "ramoops_marker.h"
+#include "framebuffer_mark.h"
+#include "lz4_block.h"
 
 #define RAM_BASE 0x80000000ULL
 #define RAM_SIZE 0x04000000ULL
@@ -17,12 +19,11 @@
 #ifndef J2_DIAGNOSTIC_HALT
 #define J2_DIAGNOSTIC_HALT 0
 #endif
-#ifndef J2_PAYLOAD_BASE
-#define J2_PAYLOAD_BASE 0x84006000ULL
-#endif
-#ifndef J2_PAYLOAD_LIMIT
-#define J2_PAYLOAD_LIMIT 0x85000000ULL
-#endif
+#define J2_RAMDISK_BASE 0x44000000ULL
+#define J2_RAMDISK_LIMIT 0x45000000ULL
+#define J2_STAGE_BASE 0x80000000ULL
+#define J2_STAGE_LIMIT 0x81000000ULL
+#define J2_CONTAINER_HEADER_BYTES 32ULL
 
 struct seg { uint64_t va, vs, off, fs; };
 struct payload {
@@ -42,7 +43,6 @@ _Static_assert(__builtin_offsetof(struct payload, segs) == 0x2a8, "payload heade
 _Static_assert(__builtin_offsetof(struct boot_args, video) == 40, "boot_args video offset");
 _Static_assert(__builtin_offsetof(struct boot_args, cmdline) == 108, "boot_args command line offset");
 _Static_assert(sizeof(struct boot_args) == 736, "boot_args v2 layout");
-extern uint8_t _payload[];
 extern void j2_enter_xnu(uint64_t entry_va, uint64_t boot_args_pa,
 			 uint64_t ttbr0_pa, uint64_t ttbr1_pa) __attribute__((noreturn));
 
@@ -64,17 +64,34 @@ static void clean_invalidate_dcache(uint64_t addr,uint64_t len) {
     __asm__ volatile("dsb sy" ::: "memory");
 }
 static void halt(uint32_t reason) {
+	j2_framebuffer_mark(J2_SCREEN_LOADER_REJECT);
     j2_ramoops_mark(J2_STAGE_LOADER_REJECT, reason, 0, 0);
     for (;;) __asm__ volatile("wfe");
 }
 
 void j2_loader_main(void) {
-    const struct payload *p=(const struct payload *)_payload;
-    uint64_t payload_end, adt_end;
+    const uint8_t *ramdisk=(const uint8_t *)J2_RAMDISK_BASE;
+    uint8_t *payload=(uint8_t *)J2_STAGE_BASE;
+    const struct payload *p;
+    uint64_t compressed_size, expanded_size, payload_end;
+    if (ramdisk[0]!='J' || ramdisk[1]!='2' || ramdisk[2]!='L' || ramdisk[3]!='Z' ||
+        ramdisk[4]!='4' || ramdisk[5] || ramdisk[6] || ramdisk[7] ||
+        *(const uint32_t *)(ramdisk+8)!=1 || *(const uint32_t *)(ramdisk+12)!=0)
+        halt(0xffff0001U);
+    expanded_size=*(const uint64_t *)(ramdisk+16);
+    compressed_size=*(const uint64_t *)(ramdisk+24);
+    if (expanded_size<0x2a8 || expanded_size>J2_STAGE_LIMIT-J2_STAGE_BASE ||
+        compressed_size==0 || compressed_size>J2_RAMDISK_LIMIT-J2_RAMDISK_BASE-J2_CONTAINER_HEADER_BYTES ||
+        !add_ok(J2_STAGE_BASE,expanded_size,&payload_end) ||
+        payload_end>J2_STAGE_LIMIT ||
+        !j2_lz4_decompress_block(ramdisk+J2_CONTAINER_HEADER_BYTES,compressed_size,
+                                 payload,J2_STAGE_LIMIT-J2_STAGE_BASE,expanded_size))
+        halt(0xffff0002U);
+    p=(const struct payload *)payload;
+    uint64_t adt_end;
     if (!eq8(p->magic,"J2PRIME\0") || p->version!=1 || !p->nsegs || p->nsegs>MAX_SEGS ||
         p->phys!=RAM_BASE || p->mem_size!=RAM_SIZE || p->total_size<sizeof(uint32_t)*2 ||
-        !add_ok((uint64_t)_payload,p->total_size,&payload_end) ||
-        (uint64_t)_payload<J2_PAYLOAD_BASE || payload_end>J2_PAYLOAD_LIMIT ||
+        p->total_size!=expanded_size ||
         p->adt_off<0x2a8ULL+(uint64_t)p->nsegs*sizeof(struct seg) ||
         !add_ok(p->adt_off,p->adt_size,&adt_end) || adt_end>p->total_size)
         halt(0xffff0000U);
@@ -86,7 +103,7 @@ void j2_loader_main(void) {
             !add_ok(s->va,s->vs,&va_end) || !va_to_pa(s->va,p->virt,p->phys,&dst) ||
             !add_ok(dst,s->vs,&dst_end) || dst<RAM_BASE || dst_end>RAM_BASE+RAM_SIZE)
             halt(0xffff0000U);
-        if ((uint64_t)_payload < dst_end && dst < payload_end) halt(0xffff0000U);
+        if (J2_STAGE_BASE < dst_end && dst < payload_end) halt(0xffff0000U);
         for (uint32_t j=0;j<i;j++) {
             const struct seg *q=&p->segs[j]; uint64_t qlo=0, qhi=0;
             if (!va_to_pa(q->va,p->virt,p->phys,&qlo) || !add_ok(qlo,q->vs,&qhi)) halt(0xffff0000U);
@@ -106,7 +123,7 @@ void j2_loader_main(void) {
         const struct seg *s=&p->segs[i]; uint64_t dst_pa=0;
         if (!va_to_pa(s->va,p->virt,p->phys,&dst_pa)) halt(0xffff0000U);
         uint8_t *dst=(uint8_t *)dst_pa;
-        bytes_copy(dst,_payload+s->off,s->fs);
+        bytes_copy(dst,payload+s->off,s->fs);
         bytes_zero(dst+s->fs,s->vs-s->fs);
         clean_invalidate_dcache(dst_pa,s->vs);
     }
@@ -117,12 +134,12 @@ void j2_loader_main(void) {
     uint64_t tables_pa=ba_end, tables_end=tables_pa+J2_TABLE_BYTES;
     if (ba_end>RAM_BASE+RAM_SIZE || tables_end<tables_pa ||
         tables_end>RAM_BASE+RAM_SIZE || adt_pa<max_end ||
-        (adt_pa<payload_end && (uint64_t)_payload<adt_end_pa) ||
-        (ba_pa<payload_end && (uint64_t)_payload<ba_end) ||
+        (adt_pa<payload_end && J2_STAGE_BASE<adt_end_pa) ||
+        (ba_pa<payload_end && J2_STAGE_BASE<ba_end) ||
         (ba_pa<adt_end_pa && adt_pa<ba_end) ||
         (tables_pa<adt_end_pa && adt_pa<tables_end) ||
-        (tables_pa<payload_end && (uint64_t)_payload<tables_end)) halt(0x1001U);
-    bytes_copy((uint8_t *)adt_pa,_payload+p->adt_off,p->adt_size);
+        (tables_pa<payload_end && J2_STAGE_BASE<tables_end)) halt(0x1001U);
+    bytes_copy((uint8_t *)adt_pa,payload+p->adt_off,p->adt_size);
     clean_invalidate_dcache(adt_pa,p->adt_size);
     bytes_zero((uint8_t *)ba_pa,PAGE);
     struct boot_args *ba=(struct boot_args *)ba_pa;
@@ -140,6 +157,7 @@ void j2_loader_main(void) {
         halt(0x1002U);
     clean_invalidate_dcache(tables_pa,J2_TABLE_BYTES);
     j2_ramoops_mark(J2_STAGE_LOADER_READY, 0, 0, 0);
+	j2_framebuffer_mark(J2_SCREEN_LOADER_READY);
 #if J2_DIAGNOSTIC_HALT
     for (;;) __asm__ volatile("wfe");
 #endif

@@ -1,5 +1,15 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> J2 PRIME ACTIVE HANDOFF (2026-10-28): compressed recovery payload <<<
+
+Latest branch remains `codex/j2prime-early-bringup`, local parent before this work `9e65e2c`. The previous candidate embedded the 15.75 MB uncompressed XNU package as part of the Android kernel component and stripped both ramdisk and appended DTB. Replaced that packaging with a 24 KiB shim+loader kernel, LZ4 container in the stock ramdisk slot `0x44000000`, and byte-exact original appended DTB. The A64 loader validates/decompresses into `[0x80000000,0x81000000)`, and the package/build checks ensure no overlap with XNU segments (package end `0x80f04f80`, first segment `0x81004000`). The prior deterministic missing TTBR identity map for active loader/stack remains fixed by commit `9e65e2c`.
+
+Offline image: `/mnt/d/J2-iOS-audit-20261027/j2prime-lz4-ramdisk-20261028/J2PRIME-RECOVERY-DO-NOT-FLASH.img`; expected SHA-256 `00fd956b795fec090b690be1c09811fa383c9b2a36de4b0b1a6062199771127c`; 16 MiB partition size; meaningful components end at `0x7f2000`. Original recovery backup `/mnt/d/J2-iOS-audit-20261027/live-recovery.img` is 16 MiB and SHA-256 `fc8d45d70da23798b9e02e8b059774ca2f07bbd583801bfe813458910d993a23`. It was successfully restored and read-back verified after the previous test; the phone booted LineageOS Android 8.1. No candidate from this milestone has been sent/run. Recovery route is Download Mode then Heimdall flash of this original backup to `recovery` only; this exact recovery-only restore was already used successfully. Never write boot/system or GPT.
+
+Full offline `j2boot/build-recovery-image.sh` passes: freestanding AArch64 cross-build with `-Werror`; Python and C decoder round-trip of actual 15,748,992-byte payload; C decoder rejects wrong output bound; DTB and decompressed package byte verification; partition bounds; framebuffer stage pattern; five-page TTBR map regression; ramoops marker preservation. Image contains 24,576-byte kernel, 7,817,398-byte ramdisk container (7,817,366-byte compressed block), and original 485,376-byte DTB. Runtime evidence still does not establish Samsung LK loading this exact combination, SMC EL/cache state, XNU entry, or any XNU driver startup. Treat as ready for one controlled recovery-context evaluation, not as a working iOS boot. See `J2-EARLY-BOOT.md` for layout and exact limitations.
+
+This source milestone is committed on `codex/j2prime-early-bringup`; push is blocked because GitHub HTTPS has no configured credential and `gh` is unavailable. The Windows ADB client currently sees Android (`grandpplte`), but this environment did not locate Heimdall CLI, so no new recovery write/test was started.
+
 ## Agent handoff / active work (2026-10-15, latest)
 
 ### >>> UPDATE 2026-10-27: J2 PRIME XNU EXPERIMENT (separate branch) <<<
