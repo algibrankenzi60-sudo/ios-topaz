@@ -5,6 +5,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 patch = (ROOT / 'xnu/patches/0954-j2prime-pstore-vm-checkpoints.patch').read_text()
+order_patch = (ROOT / 'xnu/patches/0955-j2prime-relocate-diagnostics-after-tlb.patch').read_text()
 
 L2_SIZE = 2 * 1024 * 1024
 FB_VA_OFFSET = 1 * L2_SIZE
@@ -26,4 +27,14 @@ assert len(mapping_lines) == 1, mapping_lines
 assert re.search(r'J2_EARLY_RAMOOPS_VA\s*-\s*SWEET_EARLY_FB_VA', mapping_lines[0])
 assert not re.search(r'ramoops_slot\s*=\s*first\s*\+\s*3\b', patch)
 
-print('J2 ramoops alias maps VM_MIN+16MiB to physical 0x43f00000; pointer offset matches')
+# The diagnostics must keep the old pointers until the translation switch is complete.
+flush = order_patch.index('\tflush_mmu_tlb();')
+ramoops = order_patch.rindex('sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA)')
+framebuffer = order_patch.rindex('sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL)')
+mark10 = order_patch.index('sweet_early_mark(10,')
+assert flush < ramoops < framebuffer < mark10
+added_lines = [line[1:] for line in order_patch.splitlines() if line.startswith('+')]
+relocate = next(i for i, line in enumerate(added_lines) if 'sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);' in line)
+comment = next(i for i, line in enumerate(added_lines) if 'Both diagnostic aliases switch only after the new tables and TLB are active.' in line)
+assert relocate > comment
+print('J2 ramoops alias matches its physical mapping; diagnostic aliases relocate only after TLB flush')

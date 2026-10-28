@@ -56,6 +56,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate J2 Prime diagnostic alias handoff order
+        run: python3 tools/test_j2prime_alias.py
+
       - name: Fetch build script
         run: |
           git init -q dxb

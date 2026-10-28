@@ -1,0 +1,54 @@
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+index bf7b32b..5f15164 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -2271,26 +2271,19 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ #if defined(J2PRIME)
+ 	/* TTBR0 is still live: record the transition before changing the pointer. */
+ 	sweet_early_mark(27, "kernel TTBR1 active");
+-	if (j2_early_ramoops_mapped) {
+-		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
+-	} else {
+-		sweet_early_disable_ramoops();
+-	}
+ #endif
+ 
+ 	ml_enable_monitor();
+ 
+ #if (defined(SWEET) && defined(TOPAZ_4K)) || defined(J2PRIME)
+-	/* The final TTBR1 is live; leave the outgoing framebuffer alias. */
++#if !defined(J2PRIME)
++	/* Keep SWEET framebuffer relocation behavior on its original target. */
+ 	if (sweet_early_fb_mapped) {
+-#if defined(J2PRIME)
+-		sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL);
+-#else
+ 		sweet_early_relocate(SWEET_EARLY_FB_VA);
+-#endif
+ 	} else {
+ 		sweet_early_disable();
+ 	}
++#endif
+ #elif defined(SWEET)
+ 	/* The final TTBR1 is live; leave the outgoing VA=PA framebuffer alias. */
+ 	sweet_early_relocate(SWEET_EARLY_FB_VA);
+@@ -2298,6 +2291,19 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
+ 
+ 	flush_mmu_tlb();
++#if defined(J2PRIME)
++	/* Both diagnostic aliases switch only after the new tables and TLB are active. */
++	if (j2_early_ramoops_mapped) {
++		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
++	} else {
++		sweet_early_disable_ramoops();
++	}
++	if (sweet_early_fb_mapped) {
++		sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL);
++	} else {
++		sweet_early_disable();
++	}
++#endif
+ 	sweet_early_mark(10, "TTBR0 off; TLB flushed");
+ #if defined(J2PRIME)
+ 	sweet_early_mark(28, "low translation table retired");
