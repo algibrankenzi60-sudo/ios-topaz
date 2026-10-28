@@ -5,7 +5,12 @@ NDK_BIN="${ANDROID_NDK_BIN:-/mnt/c/Users/awan/AppData/Local/Android/Sdk/ndk/30.0
 CC="$NDK_BIN/clang.exe"
 BUILD="${1:-$ROOT/j2boot/out}"
 SHIM="/mnt/d/J2-iOS-audit-20261027/bootshim-build/bootshim-padded.bin"
-KERNEL="/tmp/xnu-kernel-782ea05/kernel.development.j2prime"
+KERNEL="${J2_XNU_KERNEL:-/tmp/xnu-kernel-782ea05/kernel.development.j2prime}"
+if [[ ! -f "$KERNEL" ]]; then
+  echo "XNU kernel not found: $KERNEL" >&2
+  echo "Set J2_XNU_KERNEL to the audited kernel.development.j2prime artifact." >&2
+  exit 1
+fi
 STACK_TOP=0x41000000
 mkdir -p "$BUILD"
 to_win() { wslpath -w "$1"; }
