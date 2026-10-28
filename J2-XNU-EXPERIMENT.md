@@ -36,7 +36,7 @@ The builder checks the live `/proc/iomem` and memblock snapshot for the source w
 
 ## Later RAM-only launch and recovery
 
-The launcher deliberately separates loading from execution. `load` streams the image and controller to `/dev` tmpfs, checks device-side SHA-256, and calls `kexec_load`; it does not reboot or execute the image. No persistent filesystem or partition is used. `execute` requires an explicit confirmation token and must only be used after separate user approval.
+The launcher deliberately separates loading from execution. It Base64-encodes streams before sending them through ADB, avoiding Windows text-mode `0x1a`/Ctrl+Z truncation observed with raw stdin. `load` decodes the image and controller into `/dev` tmpfs, checks device-side SHA-256, and calls `kexec_load`; it does not reboot or execute the image. No persistent filesystem or partition is used. `execute` requires an explicit confirmation token and must only be used after separate user approval.
 
 ```sh
 tools/j2-kexec-launch.sh IMAGE CONTROL MANIFEST load

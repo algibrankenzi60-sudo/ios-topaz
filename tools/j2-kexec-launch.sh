@@ -43,8 +43,10 @@ if [[ "$ACTION" == load ]]; then
   (( SIZE <= 16777216 )) || { echo "refusing image larger than the audited 16 MiB kexec window: $SIZE" >&2; exit 4; }
   [[ "$(adb_cmd get-state 2>/dev/null || true)" == device ]] || { echo 'ADB device unavailable' >&2; exit 5; }
   remote 'id -u | grep -qx 0' >/dev/null || { echo 'root su access is required' >&2; exit 5; }
-  remote 'cat >/dev/j2prime-kexec.bin' < "$IMAGE"
-  remote 'cat >/dev/j2-kexec-ctl' < "$CONTROL"
+  # Encode the stream as ASCII before handing it to Windows adb.exe. Its
+  # redirected stdin can treat byte 0x1a as DOS EOF; base64 avoids truncation.
+  base64 -w 0 "$IMAGE" | remote 'toybox base64 -d > /dev/j2prime-kexec.bin'
+  base64 -w 0 "$CONTROL" | remote 'toybox base64 -d > /dev/j2-kexec-ctl'
   remote 'chmod 700 /dev/j2-kexec-ctl && chmod 600 /dev/j2prime-kexec.bin'
   DEVICE_SHA=$(remote 'toybox sha256sum /dev/j2prime-kexec.bin' | tr -d '\r' | awk '{print $1}')
   CONTROL_SHA=$(sha256sum "$CONTROL" | awk '{print $1}')
