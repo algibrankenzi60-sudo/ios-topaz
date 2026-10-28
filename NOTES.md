@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> J2 PRIME CURRENT HANDOFF (2026-10-28): checkpoint 27 <<<
+
+Continue from branch `codex/j2prime-early-bringup`, HEAD `88dafec`. On the seed-enabled recovery candidate, the user saw `SWEET EARLY 27: kernel TTBR1 active`; this is the furthest confirmed XNU checkpoint and proves progress past RAM geometry and physical-map initialization. Static audit found the next ramoops write used an alias at VM_MIN+8 MiB while its pointer had moved to VM_MIN+16 MiB. Patch 0954 now computes the correct L2 slot (`first + 7`); it needs CI compilation before any next device run. The old seed candidate must not be run again.
+
+ADB found the handset in TWRP (not Download Mode). The original recovery backup was restored only to `/dev/block/mmcblk0p13`; full readback matches SHA-256 `fc8d45d70da23798b9e02e8b059774ca2f07bbd583801bfe813458910d993a23`, and the phone rebooted into Android. No other partition was written. Commit `c9f6c17` contains the seed and corrected ramoops alias; both host checks pass. Push failed because this environment has no GitHub credentials, so CI has not started. Next: push `c9f6c17` from an authenticated Git client, wait for the J2PRIME CI kernel build, then build a new offline image; do not reuse the old seed candidate.
+
 ## >>> J2 PRIME ACTIVE HANDOFF (2026-10-28): compressed recovery payload <<<
 
 Latest branch remains `codex/j2prime-early-bringup`, source milestone `01e1b61` (`Hand off J2 XNU at physical cold entry`). The recovery image uses a 24 KiB MT6737 shim+loader kernel, an LZ4 container in the stock ramdisk slot `0x44000000`, and the byte-exact original appended DTB. The A64 loader expands the 15.75 MB package into `[0x80000000,0x80f04f80)`, before XNU's first segment at `0x81004000`. The physical-entry candidate displayed the four-color shim pattern, green loader-ready pattern, then XNU's white `SWEET EARLY 1` through `7` markers ending at `entering arm_vm_init`. That confirms XNU startup executed to the marker immediately before `arm_vm_init`, but does not locate a later fault because the early screen console can be disabled while changing page tables. The original recovery image was restored and readback-hash verified; user confirms Android home.

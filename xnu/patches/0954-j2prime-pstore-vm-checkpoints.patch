@@ -69,7 +69,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 +		}
 +	}
 +#if defined(J2PRIME)
-+	const unsigned int ramoops_slot = first + 3;
++	const unsigned int ramoops_slot = first + (unsigned int)((J2_EARLY_RAMOOPS_VA - SWEET_EARLY_FB_VA) >> ARM_TT_L2_SHIFT);
 +	if (ramoops_slot < TTE_PGENTRIES && l2[ramoops_slot] == ARM_TTE_EMPTY) {
 +		l2[ramoops_slot] = 0x43f00000ULL | ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK |
  		    ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) |

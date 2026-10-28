@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import re
+import secrets
 import struct
 import sys
 
@@ -145,11 +146,16 @@ def audit_ram(dtb_path, base=RAM_BASE, size=RAM_SIZE, iomem_path=None):
                        'Candidate is inside captured FDT RAM and outside static reservations and declared dynamic alloc-ranges; '
                        'no runtime /proc/iomem evidence was supplied.')}
 
-def build():
+def build(random_seed=None):
+    if random_seed is None:
+        random_seed = secrets.token_bytes(64)
+    if len(random_seed) != 64 or not any(random_seed):
+        raise ValueError('XNU /chosen/random-seed must contain 64 nonzero entropy bytes')
     phandle = iter(range(1, 100))
     ph = lambda: ('AAPL,phandle', u32(next(phandle)))
     chosen = node('chosen', [ph(), ('dram-base', u64(RAM_BASE)), ('dram-size', u64(RAM_SIZE)),
         ('debug-enabled', u32(1)),
+        ('random-seed', random_seed),
         ('firmware-version', cstr('j2prime-mt6737t-earlyboot'))],
         [node('memory-map', [ph()])])
     cpu = node('cpu0', [ph(), ('device_type', cstr('cpu')), ('compatible', cstr('arm,cortex-a53')),
@@ -178,13 +184,21 @@ def build():
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('out'); ap.add_argument('--dtb', default=DEFAULT_DTB); ap.add_argument('--iomem')
+    ap.add_argument('--random-seed-file', help='optional 64-byte seed; otherwise use host CSPRNG')
     ap.add_argument('--audit-json')
     a = ap.parse_args()
     audit = audit_ram(a.dtb, iomem_path=a.iomem)
     if audit['dynamic_reservation_risk']:
         raise SystemExit('candidate RAM intersects a dynamic reserved-memory allocation range: ' +
                          ', '.join(audit['dynamic_reservation_risk']))
-    blob = adt.serialize(build())
+    random_seed = None
+    seed_source = 'host CSPRNG (build-time; development image only)'
+    if a.random_seed_file:
+        random_seed = open(a.random_seed_file, 'rb').read()
+        seed_source = 'caller-supplied 64-byte file'
+    blob = adt.serialize(build(random_seed))
+    audit['xnu_random_seed_bytes'] = 64
+    audit['xnu_random_seed_source'] = seed_source
     with open(a.out, 'wb') as f: f.write(blob)
     if a.audit_json:
         with open(a.audit_json, 'w') as f: json.dump(audit, f, indent=2); f.write('\n')
