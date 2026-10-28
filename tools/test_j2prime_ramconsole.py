@@ -67,7 +67,8 @@ int main(void) {{
     h->sig = J2_RAMCONSOLE_SIG;
     h->sz_buffer = J2_RAMCONSOLE_SIZE;
     h->off_linux = 512;
-    h->off_console = 832;
+    h->off_console = 1216; /* 512 + ALIGN(sizeof(G532G rr), 64), NR_CPUS=4 */
+    assert(h->off_console - h->off_linux == 704u);
     h->sz_console = J2_RAMCONSOLE_SIZE - h->off_console;
     h->log_start = 0;
     h->log_size = 17;
@@ -99,7 +100,7 @@ int main(void) {{
     /* Append only to a non-wrapped tail; existing Samsung log stays intact. */
     h->sig = J2_RAMCONSOLE_SIG;
     h->off_linux = 512;
-    h->off_console = 832;
+    h->off_console = 1216;
     h->sz_console = J2_RAMCONSOLE_SIZE - h->off_console;
     h->log_start = h->log_size = 17;
     memcpy(mem + h->off_console, "preserved-log!!", 15);

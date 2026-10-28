@@ -12,8 +12,8 @@ index 0000000..0000000
 +#define J2_RAMCONSOLE_BASE 0x43f00000ULL
 +#define J2_RAMCONSOLE_SIZE 0x10000u
 +#define J2_RAMCONSOLE_SIG  0x43474244u
-+#define J2_RAMCONSOLE_RR_SIZE 276u
-+#define J2_RAMCONSOLE_RR_ALIGNED 320u
++#define J2_RAMCONSOLE_RR_MIN_SIZE 276u
++#define J2_RAMCONSOLE_RR_ALIGNMENT 64u
 +#define J2_RAMCONSOLE_FIQ_STEP_OFFSET 272u
 +
 +extern volatile uint32_t j2prime_early_exception_phase;
@@ -76,7 +76,8 @@ index 0000000..0000000
 +	if (h->sig != J2_RAMCONSOLE_SIG || h->sz_buffer != J2_RAMCONSOLE_SIZE ||
 +	    h->off_linux > h->sz_buffer || h->off_console > h->sz_buffer ||
 +	    h->off_console < h->off_linux ||
-+	    h->off_console - h->off_linux != J2_RAMCONSOLE_RR_ALIGNED ||
++	    h->off_console - h->off_linux < J2_RAMCONSOLE_RR_MIN_SIZE ||
++	    (h->off_console - h->off_linux) % J2_RAMCONSOLE_RR_ALIGNMENT != 0 ||
 +	    h->sz_console != h->sz_buffer - h->off_console ||
 +	    h->log_start > h->sz_console || h->log_size > h->sz_console) {
 +		return 0;
