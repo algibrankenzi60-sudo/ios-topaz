@@ -42,10 +42,12 @@ int main(void)
 	memset(region, 0, sizeof(region));
 	j2prime_ramoops_mark(region, 21, "vm-init-enter");
 	j2prime_ramoops_mark(region, 22, "ram-range-ok");
+	j2prime_ramoops_mark(region, 27, "kernel-ttbr1-active");
 	assert(count_records() == 1);
 	assert(header_at(RECORD_COUNT - 1)[0] == BUFFER_SIG);
 	assert(strstr(data_at(RECORD_COUNT - 1), "J2XNU/1\nJ2XNU:21:vm-init-enter\n"));
 	assert(strstr(data_at(RECORD_COUNT - 1), "J2XNU:22:ram-range-ok\n"));
+	assert(strstr(data_at(RECORD_COUNT - 1), "J2XNU:27:kernel-ttbr1-active\n"));
 
 	/* An occupied foreign record must remain byte-for-byte unchanged. */
 	uint8_t *foreign = region + (RECORD_COUNT - 2) * RECORD_BYTES;

@@ -134,7 +134,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  
  #if defined(ARM_LARGE_MEMORY)
  	/*
-@@ -2227,9 +2259,23 @@
+@@ -2227,9 +2259,24 @@
  #if defined(SWEET) || defined(J2PRIME)
  	/* phystokv() must still refer to the bootstrap aperture here. */
  	sweet_early_map_final();
@@ -148,17 +148,18 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 +#endif
  	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
 +#if defined(J2PRIME)
++	/* TTBR0 is still live: record the transition before changing the pointer. */
++	sweet_early_mark(27, "kernel TTBR1 active");
 +	if (j2_early_ramoops_mapped) {
 +		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
 +	} else {
 +		sweet_early_disable_ramoops();
 +	}
-+	sweet_early_mark(27, "kernel TTBR1 active");
 +#endif
  
  	ml_enable_monitor();
  
-@@ -2252,6 +2298,9 @@
+@@ -2252,6 +2299,9 @@
  
  	flush_mmu_tlb();
  	sweet_early_mark(10, "TTBR0 off; TLB flushed");
@@ -168,7 +169,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  	kva_active = TRUE;
  	// global table pointers may need to be different due to physical aperture remapping
  	cpu_tte = (tt_entry_t*)(phystokv(cpu_ttep));
-@@ -2352,6 +2401,9 @@
+@@ -2352,6 +2402,9 @@
  	sweet_early_mark(12, "calling pmap_bootstrap");
  	pmap_bootstrap(dynamic_memory_begin);
  	sweet_early_mark(13, "pmap_bootstrap done");
