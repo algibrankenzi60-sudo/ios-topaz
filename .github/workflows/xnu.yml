@@ -118,6 +118,14 @@ jobs:
           bash build.sh
           ccache -s
 
+      - name: Verify J2 Prime RAM-console trace was applied and linked
+        if: github.ref == 'refs/heads/codex/j2prime-early-bringup' || inputs.machine_config == 'J2PRIME'
+        run: |
+          grep -q 'osfmk/arm64/j2prime_ramconsole.c' dxb/xnu/osfmk/conf/files.arm64
+          grep -q 'j2prime_ramconsole_mark(27)' dxb/xnu/osfmk/arm64/arm_vm_init.c
+          test -f dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/j2prime_ramconsole.d
+          strings dxb/fakeroot/System/Library/Kernels/kernel.development.j2prime | grep -Fq 'J2XNU EXC phase='
+
       - name: Package build tree for local compiles
         if: always()
         run: |

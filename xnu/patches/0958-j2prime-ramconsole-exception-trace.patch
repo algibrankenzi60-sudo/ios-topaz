@@ -279,16 +279,16 @@ diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
 diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
-@@ -42,6 +42,9 @@
+@@ -42,8 +42,9 @@
  #include <arm64/proc_reg.h>
  #include <arm64/lowglobals.h>
  #include <arm64/sweet_early.h>
-+#if defined(J2PRIME)
+ #if defined(J2PRIME)
+ #include <arm64/j2prime_ramoops.h>
 +#include <arm64/j2prime_ramconsole.h>
-+#endif
+ #endif
  #include <arm/cpu_data_internal.h>
  #include <arm/misc_protos.h>
- #include <pexpert/arm64/boot.h>
 @@ -2266,14 +2269,24 @@
  	arm_vm_physmap_init(args);
  #if defined(J2PRIME)
