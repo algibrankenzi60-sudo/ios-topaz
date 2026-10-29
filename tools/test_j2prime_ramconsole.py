@@ -7,8 +7,37 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "xnu/patches/0958-j2prime-ramconsole-exception-trace.patch"
 
+
+def verify_hunk_counts(text):
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if not line.startswith("@@ "):
+            continue
+        import re
+        match = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+        assert match, f"unrecognized unified-diff hunk header: {line}"
+        want_old, want_new = int(match.group(2) or 1), int(match.group(4) or 1)
+        old = new = 0
+        for item in lines[i + 1:]:
+            if item.startswith("@@ ") or item.startswith("diff --git "):
+                break
+            if item.startswith("\\"):
+                continue
+            if item.startswith("+") and not item.startswith("+++"):
+                new += 1
+            elif item.startswith("-") and not item.startswith("---"):
+                old += 1
+            elif item.startswith(" "):
+                old += 1
+                new += 1
+        assert (old, new) == (want_old, want_new), (
+            f"hunk count mismatch at line {i + 1}: declared {want_old}/{want_new}, "
+            f"found {old}/{new}"
+        )
+
 # Test the implementation as embedded in patch 0958, without applying it to XNU.
 patch = SOURCE.read_text()
+verify_hunk_counts(patch)
 start = patch.index("diff --git a/osfmk/arm64/j2prime_ramconsole.h")
 end = patch.index("diff --git a/osfmk/arm64/j2prime_exception_vectors.s")
 section = patch[start:end]

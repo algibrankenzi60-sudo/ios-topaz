@@ -8,3 +8,13 @@ index 0000000..0000000 100644
 +#endif /* KERNEL */
  };
  typedef struct IORPC IORPC;
+diff --git a/iokit/IOKit/IORPC.h b/iokit/IOKit/IORPC.h
+index 0000000..0000000 100644
+--- a/iokit/IOKit/IORPC.h
++++ b/iokit/IOKit/IORPC.h
+@@ -209,2 +209,5 @@
++#ifdef KERNEL
++	IORPCMessage     * kernelContent;
++#endif /* KERNEL */
+ };
+ typedef struct IORPC IORPC;

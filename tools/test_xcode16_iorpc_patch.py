@@ -27,16 +27,23 @@ def main():
         project["tag"] for project in release["projects"]
         if project.get("project") == "xnu"
     )
-    header = fetch(
-        "https://raw.githubusercontent.com/apple-oss-distributions/"
-        f"xnu/{xnu_tag}/iokit/DriverKit/IORPC.h"
-    )
+    headers = {
+        "iokit/DriverKit/IORPC.h": fetch(
+            "https://raw.githubusercontent.com/apple-oss-distributions/"
+            f"xnu/{xnu_tag}/iokit/DriverKit/IORPC.h"
+        ),
+        "iokit/IOKit/IORPC.h": fetch(
+            "https://raw.githubusercontent.com/apple-oss-distributions/"
+            f"xnu/{xnu_tag}/iokit/IOKit/IORPC.h"
+        ),
+    }
 
     with tempfile.TemporaryDirectory() as tmp:
-        target = os.path.join(tmp, "iokit", "DriverKit", "IORPC.h")
-        os.makedirs(os.path.dirname(target))
-        with open(target, "wb") as stream:
-            stream.write(header)
+        for relative, header in headers.items():
+            target = os.path.join(tmp, relative)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "wb") as stream:
+                stream.write(header)
 
         patch = os.path.join(
             ROOT, "xnu", "patches", "0959-xcode16-iorpc-kernelcontent.patch"
@@ -45,22 +52,24 @@ def main():
             ["git", "apply", "--check", patch], cwd=tmp,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        if check.returncode == 0:
-            subprocess.run(["git", "apply", patch], cwd=tmp, check=True)
+        if check.returncode != 0:
+            raise SystemExit(f"IORPC compatibility patch does not apply: {check.stderr}")
+        subprocess.run(["git", "apply", patch], cwd=tmp, check=True)
 
-        with open(target, encoding="utf-8") as stream:
-            source = stream.read()
-        start = source.find("struct IORPC {")
-        end = source.find("\n};", start)
-        if start < 0 or end < 0:
-            raise SystemExit("XNU source has no recognizable IORPC struct")
-        field = source.find("IORPCMessage     * kernelContent;", start, end)
-        if field < 0:
-            raise SystemExit("IORPC.kernelContent was not added to the IORPC struct")
-        guard = source.rfind("#ifdef KERNEL", start, field)
-        guard_end = source.find("#endif /* KERNEL */", field, end)
-        if guard < start or guard_end < field:
-            raise SystemExit("IORPC.kernelContent is missing or outside the guarded IORPC struct")
+        for relative in headers:
+            with open(os.path.join(tmp, relative), encoding="utf-8") as stream:
+                source = stream.read()
+            start = source.find("struct IORPC {")
+            end = source.find("\n};", start)
+            if start < 0 or end < 0:
+                raise SystemExit(f"{relative}: no recognizable IORPC struct")
+            field = source.find("IORPCMessage     * kernelContent;", start, end)
+            if field < 0:
+                raise SystemExit(f"{relative}: kernelContent missing from IORPC")
+            guard = source.rfind("#ifdef KERNEL", start, field)
+            guard_end = source.find("#endif /* KERNEL */", field, end)
+            if guard < start or guard_end < field:
+                raise SystemExit(f"{relative}: kernelContent not under the KERNEL guard")
 
     print(f"Xcode 16 IORPC compatibility patch validated against {xnu_tag}")
 

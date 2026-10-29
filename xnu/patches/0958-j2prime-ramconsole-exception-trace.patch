@@ -30,7 +30,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/osfmk/arm64/j2prime_ramconsole.c
-@@ -0,0 +1,208 @@
+@@ -0,0 +1,209 @@
 +/* J2 Prime early progress/exception marker in Samsung's reserved RAM console. */
 +#include "j2prime_ramconsole.h"
 +
