@@ -1,0 +1,24 @@
+diff --git a/osfmk/kern/thread_call.c b/osfmk/kern/thread_call.c
+--- a/osfmk/kern/thread_call.c
++++ b/osfmk/kern/thread_call.c
+@@ -841,7 +841,20 @@ _arm_delayed_call_timer(thread_call_t           new_call,
+ 		return false;
+ 	}
+ 
++#if defined(J2PRIME)
++	if (__improbable(call->tc_soft_deadline == 0 ||
++	    call->tc_soft_deadline > call->tc_pqlink.deadline)) {
++		panic("J2 thread_call deadline invariant: call=%p func=%p "
++		    "new=%p soft=%llx hard=%llx flags=%x flavor=%u group=%u",
++		    call, call->tc_func, new_call,
++		    (unsigned long long)call->tc_soft_deadline,
++		    (unsigned long long)call->tc_pqlink.deadline,
++		    call->tc_flags, (unsigned int)flavor,
++		    (unsigned int)(group - &thread_call_groups[0]));
++	}
++#else
+ 	assert((call->tc_soft_deadline != 0) && ((call->tc_soft_deadline <= call->tc_pqlink.deadline)));
++#endif
+ 
+ 	uint64_t fire_at = call->tc_soft_deadline;
+ 
