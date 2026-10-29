@@ -176,7 +176,7 @@ int main(void) {{
 ''')
     binary = tmp / "test"
     subprocess.run(
-        ["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", str(harness), "-o", str(binary)],
+        ["cc", "-O2", "-std=c11", "-Wall", "-Wextra", "-Werror", str(harness), "-o", str(binary)],
         check=True,
     )
     subprocess.run([str(binary)], check=True)
