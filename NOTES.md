@@ -1,6 +1,18 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
-## >>> J2 PRIME CURRENT HANDOFF (2026-10-28): b4ab8fe still displays checkpoint 27 <<<
+## >>> J2 PRIME CURRENT HANDOFF (2026-10-30): TTBR1 RAM-console alias fix in progress <<<
+
+Branch `codex/j2prime-early-bringup` was at `f44ef43` before this uncommitted fix. The phone is back in TWRP; no candidate has been run since restoring the known recovery. Read-only ADB checks found `/proc/last_kmsg` contains only `ram console header, hw_status: 0, fiq step 0.`, `/proc/last_kmsg_mtk` is absent, and `/sys/fs/pstore` is empty. This is no retained exception trace; it does not prove whether execution stopped after SWEET marker 27.
+
+Concrete source defect: patch 0958 wrote the custom Samsung RAM-console marker at PA/identity VA `0x43f00000` even after `set_mmu_ttb_alternate()` switched to XNU's replacement TTBR1. That PA is outside managed RAM (`0x80000000..`); patch 0954 installs a high TTBR1 alias for the containing 2 MiB block. The custom logger never switched to that alias, and SWEET ramoops relocation happened only much later. Patch 0958 is being changed to relocate both RAM-console and SWEET ramoops writers immediately after TTBR1 switch and before stage 27; if the alias was not created, both writers fail closed. This is a confirmed code-path omission; it is a plausible explanation for loss of diagnostics, not proof of the phone's exact fault.
+
+Local validation after the edit: `tools/test_j2prime_ramconsole.py` and `tools/test_j2prime_alias.py` pass; host harness checks public marker writes through the relocated pointer and safely ignores a null mapping. `git diff --check` passes. A full patch-application check is still pending against the exact CI XNU source (the available old buildtree is from an earlier patch stack). No build or device payload has been run for this fix yet. Next: verify patch-series application/build, commit the validated source, then consider a single candidate evaluation only after recovery backup/readback route remains ready. No boot/system/user-data partitions have been written.
+
+Recovery backup: `/mnt/d/J2-iOS-audit-20261027/live-recovery.img`, SHA-256 `fc8d45d70da23798b9e02e8b059774ca2f07bbd583801bfe813458910d993a23`. Heimdall 2.2.2 is at `/mnt/d/J2-iOS-audit-20261027/heimdall-win/heimdall.exe`; partition name is lowercase `recovery`. TWRP ADB serial is `4200def9d8929447` when connected. Use Windows Minimal ADB executable, not WSL's ADB, to avoid killing its server.
+
+## >>> PREVIOUS ON-DEVICE RESULT (2026-10-28): checkpoint 27 <<<
+
+## >>> PREVIOUS RESULT (2026-10-28): b4ab8fe displayed checkpoint 27 <<<
 
 Current branch `codex/j2prime-early-bringup` is at commit `b4ab8fe` (`Keep J2 bootstrap TTBR0 through early bring-up`); CI succeeded and the resulting 16 MiB recovery candidate was validated offline and evaluated once. The handset again showed `SWEET EARLY 27: kernel TTBR1 active`; it did not show checkpoint 28. This candidate retained bootstrap TTBR0, so the previous hypothesis that invalidating TTBR0 alone caused the boundary is not supported. Checkpoint 27 is called immediately after `set_mmu_ttb_alternate(cpu_ttep...)`, so the XNU path demonstrably executed through that call; the display does not prove it stopped there.
 

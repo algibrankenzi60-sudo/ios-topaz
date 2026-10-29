@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/osfmk/arm64/j2prime_ramconsole.h
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,22 @@
 +#ifndef J2PRIME_RAMCONSOLE_H
 +#define J2PRIME_RAMCONSOLE_H
 +
@@ -18,6 +18,7 @@ index 0000000..0000000
 +
 +extern volatile uint32_t j2prime_early_exception_phase;
 +void j2prime_ramconsole_mark(uint32_t stage);
++void j2prime_ramconsole_relocate(uintptr_t mapped_base);
 +void j2prime_early_exception_set_phase(uint32_t phase);
 +void j2prime_early_exception_install(void);
 +void j2prime_early_exception_restore(void);
@@ -30,7 +31,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/osfmk/arm64/j2prime_ramconsole.c
-@@ -0,0 +1,209 @@
+@@ -0,0 +1,226 @@
 +/* J2 Prime early progress/exception marker in Samsung's reserved RAM console. */
 +#include "j2prime_ramconsole.h"
 +
@@ -61,6 +62,7 @@ index 0000000..0000000
 +};
 +
 +volatile uint32_t j2prime_early_exception_phase;
++static uintptr_t j2prime_ramconsole_active_base = (uintptr_t)J2_RAMCONSOLE_BASE;
 +#ifndef J2_RAMCONSOLE_HOST_TEST
 +static uint64_t j2prime_saved_vbar;
 +static uint64_t j2prime_saved_daif;
@@ -69,6 +71,9 @@ index 0000000..0000000
 +static volatile struct j2_sec_last_reboot_reason *
 +j2_ramconsole_reason(uintptr_t base)
 +{
++	if (base == 0) {
++		return 0;
++	}
 +	volatile struct j2_ramconsole_header *h =
 +	    (volatile struct j2_ramconsole_header *)base;
 +
@@ -178,8 +183,20 @@ index 0000000..0000000
 +j2prime_ramconsole_mark(uint32_t stage)
 +{
 +	if (stage <= 0xffu) {
-+		j2_store_marker((uintptr_t)J2_RAMCONSOLE_BASE, 0x4a320000u | stage);
++		j2_store_marker(j2prime_ramconsole_active_base, 0x4a320000u | stage);
 +	}
++}
++
++/* Switch from the bootstrap identity VA to the explicit TTBR1 block alias. */
++void
++j2prime_ramconsole_relocate(uintptr_t mapped_base)
++{
++	j2prime_ramconsole_active_base = mapped_base;
++#if defined(__aarch64__)
++	__asm__ volatile("dsb sy\n\tisb" ::: "memory");
++#else
++	__atomic_thread_fence(__ATOMIC_SEQ_CST);
++#endif
 +}
 +
 +void
@@ -228,10 +245,11 @@ index 0000000..0000000
 +	uint32_t phase = j2prime_early_exception_phase & 0xffu;
 +	char line[128];
 +	/* The header marker always survives; full registers append only into free ring space. */
-+	j2_store_marker((uintptr_t)J2_RAMCONSOLE_BASE,
++	uintptr_t base = j2prime_ramconsole_active_base;
++	j2_store_marker(base,
 +	    j2_exception_marker(esr, phase));
 +	uint32_t length = j2_format_exception(line, phase, esr, elr, far, spsr);
-+	(void)j2_append_console_line((uintptr_t)J2_RAMCONSOLE_BASE, line, length);
++	(void)j2_append_console_line(base, line, length);
 +	for (;;) {
 +		__asm__ volatile("wfi" ::: "memory");
 +	}
@@ -289,7 +307,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  #endif
  #include <arm/cpu_data_internal.h>
  #include <arm/misc_protos.h>
-@@ -2266,14 +2269,24 @@
+@@ -2266,12 +2269,32 @@
  	arm_vm_physmap_init(args);
  #if defined(J2PRIME)
  	sweet_early_mark(26, "physical map initialized");
@@ -299,9 +317,15 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
  #if defined(J2PRIME)
  	/* TTBR0 is still live: record the transition before changing the pointer. */
++	/* Move reserved-RAM writers to the TTBR1 alias before touching the region. */
++	if (j2_early_ramoops_mapped) {
++		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
++		j2prime_ramconsole_relocate(J2_EARLY_RAMOOPS_BLOCK_VA);
++	} else {
++		sweet_early_disable_ramoops();
++		j2prime_ramconsole_relocate(0);
++	}
  	sweet_early_mark(27, "kernel TTBR1 active");
--#endif
--
 +	j2prime_ramconsole_mark(27);
 +#endif
 +
@@ -316,16 +340,11 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  
  #if (defined(SWEET) && defined(TOPAZ_4K)) || defined(J2PRIME)
  #if !defined(J2PRIME)
-@@ -2302,18 +2315,27 @@
+@@ -2302,13 +2315,22 @@
  	 * production configuration; TTBR0 must be retired after this transition
  	 * is independently verified.
  	 */
 +	j2prime_early_exception_set_phase(32);
- 	if (j2_early_ramoops_mapped) {
- 		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
- 	} else {
- 		sweet_early_disable_ramoops();
- 	}
 +	j2prime_ramconsole_mark(32);
 +	j2prime_early_exception_set_phase(33);
  	if (sweet_early_fb_mapped) {

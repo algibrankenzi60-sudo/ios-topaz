@@ -58,8 +58,15 @@ vm_start = patch.index("diff --git a/osfmk/arm64/arm_vm_init.c")
 vm_patch = patch[vm_start:]
 assert vm_patch.index("j2prime_early_exception_install();") < vm_patch.index(
     "set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);")
+assert vm_patch.index("set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);") < vm_patch.index(
+    "sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);")
+assert vm_patch.index("sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);") < vm_patch.index(
+    "j2prime_ramconsole_relocate(J2_EARLY_RAMOOPS_BLOCK_VA);")
+assert vm_patch.index("j2prime_ramconsole_relocate(J2_EARLY_RAMOOPS_BLOCK_VA);") < vm_patch.index(
+    'sweet_early_mark(27, "kernel TTBR1 active");')
 assert vm_patch.index('sweet_early_mark(27, "kernel TTBR1 active");') < vm_patch.index(
     "j2prime_ramconsole_mark(27);")
+assert "j2prime_ramconsole_relocate(0);" in vm_patch
 assert vm_patch.index("j2prime_ramconsole_mark(27);") < vm_patch.index(
     "j2prime_early_exception_set_phase(30);")
 for marker in ["31", "32", "33", "34", "28"]:
@@ -106,6 +113,17 @@ int main(void) {{
     memcpy(before, mem, sizeof(mem));
     j2_store_marker((uintptr_t)mem, 0x4a32001bu);
     assert(*(uint32_t *)(mem + at) == 0x4a32001bu);
+
+    /* The public writer must use the relocated TTBR1 alias. */
+    volatile uint32_t *reason_step =
+        (volatile uint32_t *)(mem + h->off_linux + J2_RAMCONSOLE_FIQ_STEP_OFFSET);
+    *reason_step = 0;
+    j2prime_ramconsole_relocate((uintptr_t)mem);
+    j2prime_ramconsole_mark(27);
+    assert(*reason_step == 0x4a32001bu);
+    j2prime_ramconsole_relocate(0);
+    j2prime_ramconsole_mark(28); /* no mapping: fail closed without a fault */
+    assert(*reason_step == 0x4a32001bu);
     for (uint32_t i = 0; i < sizeof(mem); ++i) {{
         if (i < at || i >= at + sizeof(uint32_t)) assert(mem[i] == before[i]);
     }}
