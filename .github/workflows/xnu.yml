@@ -62,6 +62,9 @@ jobs:
       - name: Validate J2 Prime RAM-console exception trace
         run: python3 tools/test_j2prime_ramconsole.py
 
+      - name: Validate Xcode 16 IORPC compatibility patch
+        run: python3 tools/test_xcode16_iorpc_patch.py
+
       - name: Fetch build script
         run: |
           git init -q dxb
@@ -127,7 +130,14 @@ jobs:
         run: |
           grep -q 'osfmk/arm64/j2prime_ramconsole.c' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'j2prime_ramconsole_mark(27)' dxb/xnu/osfmk/arm64/arm_vm_init.c
-          grep -q 'IORPCMessage     \* kernelContent;' dxb/xnu/iokit/DriverKit/IORPC.h
+          python3 - <<'PY'
+          source = open('dxb/xnu/iokit/DriverKit/IORPC.h').read()
+          start = source.index('struct IORPC {')
+          end = source.index('\n};', start)
+          field = source.index('IORPCMessage     * kernelContent;', start, end)
+          assert source.rfind('#ifdef KERNEL', start, field) > start
+          assert source.index('#endif /* KERNEL */', field, end) < end
+          PY
           test -f dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/j2prime_ramconsole.d
           strings dxb/fakeroot/System/Library/Kernels/kernel.development.j2prime | grep -Fq 'J2XNU EXC phase='
 
