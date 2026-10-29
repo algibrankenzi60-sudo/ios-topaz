@@ -56,12 +56,12 @@ for line in section.splitlines():
 
 vm_start = patch.index("diff --git a/osfmk/arm64/arm_vm_init.c")
 vm_patch = patch[vm_start:]
+vm_added = "\n".join(line[1:] for line in vm_patch.splitlines()
+                     if line.startswith("+") and not line.startswith("+++"))
 assert vm_patch.index("j2prime_early_exception_install();") < vm_patch.index(
     "set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);")
-assert vm_patch.index("set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);") < vm_patch.index(
-    "sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);")
-assert vm_patch.index("sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);") < vm_patch.index(
-    'sweet_early_mark(27, "kernel TTBR1 active");')
+assert "sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);" not in vm_added
+assert "sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL);" not in vm_added
 assert "j2prime_ramconsole_relocate(J2_EARLY_RAMOOPS_BLOCK_VA);" not in vm_patch
 assert vm_patch.index('sweet_early_mark(27, "kernel TTBR1 active");') < vm_patch.index(
     "j2prime_ramconsole_mark(27);")
@@ -70,23 +70,14 @@ assert vm_patch.index("j2prime_ramconsole_mark(27);") < vm_patch.index(
 for marker in ["32", "33", "34", "28"]:
     assert f"j2prime_ramconsole_mark({marker});" in vm_patch
 assert vm_patch.index("j2prime_ramconsole_mark(34);") < vm_patch.index(
-    'sweet_early_mark(28, "replacement TTBR1 aliases active; TTBR0 retained");')
+    'sweet_early_mark(28, "TTBR1 active; bootstrap TTBR0 retained");')
 assert vm_patch.index("j2prime_ramconsole_mark(28);") < vm_patch.index(
     "j2prime_early_exception_restore();")
 assert vm_patch.index("j2prime_ramconsole_mark(27);") < vm_patch.index(
     "j2prime_early_exception_set_phase(30);")
-fb_start = vm_patch.index("if (sweet_early_fb_mapped) {")
-fb_end = vm_patch.index("j2prime_ramconsole_mark(33);", fb_start)
-fb_patch = vm_patch[fb_start:fb_end]
-fb_lines = fb_patch.splitlines()
-assert fb_lines.count("-\t} else {") == 1
-assert fb_lines.count("+\t} else {") == 1
-assert fb_lines.count("-\t}") == 1
-assert fb_lines.count("+\t}") == 1
-assert sum(
-    line.startswith("+") and "sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);" in line
-    for line in vm_patch.splitlines()
-) == 1
+assert vm_patch.index('sweet_early_mark(28, "TTBR1 active; bootstrap TTBR0 retained");') < vm_patch.index(
+    "j2prime_ramconsole_mark(28);")
+assert "Keep framebuffer and RAM-console writers on the bootstrap identity" in vm_added
 
 vectors = patch[patch.index("diff --git a/osfmk/arm64/j2prime_exception_vectors.s"):]
 assert ".align 11" in vectors and ".rept 16" in vectors and ".space\t124" in vectors

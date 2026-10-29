@@ -314,7 +314,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  #endif
  #include <arm/cpu_data_internal.h>
  #include <arm/misc_protos.h>
-@@ -2266,9 +2269,20 @@
+@@ -2266,9 +2269,15 @@
  	arm_vm_physmap_init(args);
  #if defined(J2PRIME)
  	sweet_early_mark(26, "physical map initialized");
@@ -324,18 +324,13 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
  #if defined(J2PRIME)
  	/* TTBR0 is still live: record the transition before changing the pointer. */
-+	/* Keep the exception recorder on its proven TTBR0 identity mapping.
-+	 * Only the ordinary SWEET ramoops writer moves to its TTBR1 alias. */
-+	if (j2_early_ramoops_mapped) {
-+		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
-+	} else {
-+		sweet_early_disable_ramoops();
-+	}
++	/* Keep framebuffer and RAM-console writers on the bootstrap identity
++	 * mappings until checkpoint 28. J2PRIME retains TTBR0 below. */
  	sweet_early_mark(27, "kernel TTBR1 active");
 +	j2prime_ramconsole_mark(27);
 +	j2prime_early_exception_set_phase(30);
  #endif
-@@ -2302,18 +2315,22 @@
+@@ -2302,18 +2315,17 @@
  	 * production configuration; TTBR0 must be retired after this transition
  	 * is independently verified.
  	 */
@@ -347,19 +342,18 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 -	} else {
 -		sweet_early_disable_ramoops();
 -	}
- 	if (sweet_early_fb_mapped) {
- 		sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL);
+-	if (sweet_early_fb_mapped) {
+-		sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL);
 -	} else {
-+	} else {
- 		sweet_early_disable();
+-		sweet_early_disable();
 -	}
-+	}
 +	j2prime_ramconsole_mark(33);
 +	j2prime_early_exception_set_phase(34);
  	sweet_early_mark(10, "J2 bootstrap TTBR0 retained for bring-up");
 +	j2prime_ramconsole_mark(34);
 +	j2prime_early_exception_set_phase(35);
- 	sweet_early_mark(28, "replacement TTBR1 aliases active; TTBR0 retained");
+-	sweet_early_mark(28, "TTBR1 active; bootstrap TTBR0 retained");
++	sweet_early_mark(28, "TTBR1 active; bootstrap TTBR0 retained");
 +	j2prime_ramconsole_mark(28);
 +	j2prime_early_exception_restore();
  #else

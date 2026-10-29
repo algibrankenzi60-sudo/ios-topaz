@@ -14,10 +14,10 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 -	/* Both diagnostic aliases switch only after the new tables and TLB are active. */
 +	/*
 +	 * Bring-up workaround: retain the known-good bootstrap TTBR0 while
-+	 * validating that the replacement TTBR1 and both device-RAM aliases are
-+	 * usable. The prior image stopped immediately after marker 27, at the
-+	 * TTBR0 replacement/TLB invalidation boundary. Do not use this mode as a
-+	 * production configuration; TTBR0 must be retired after this transition
++	 * validating the replacement TTBR1 while diagnostics remain on the
++	 * bootstrap identity mappings. The prior image stopped after marker 27.
++	 * Do not use this mode as a production configuration; retire TTBR0 only
++	 * after the new mapping transition is independently verified.
 +	 * is independently verified.
 +	 */
  	if (j2_early_ramoops_mapped) {
@@ -29,7 +29,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  	}
 -#endif
 +	sweet_early_mark(10, "J2 bootstrap TTBR0 retained for bring-up");
-+	sweet_early_mark(28, "replacement TTBR1 aliases active; TTBR0 retained");
++	sweet_early_mark(28, "TTBR1 active; bootstrap TTBR0 retained");
 +#else
  	sweet_early_mark(10, "TTBR0 off; TLB flushed");
 -#if defined(J2PRIME)

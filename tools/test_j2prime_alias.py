@@ -70,7 +70,7 @@ assert '#if !defined(J2PRIME)\n' in ttbr0_patch
 guarded = ttbr0_patch.split('#if !defined(J2PRIME)\n', 1)[1].split('#endif', 1)[0]
 assert '\tset_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);' in guarded
 assert '\tflush_mmu_tlb();' in guarded
-assert '+\tsweet_early_mark(28, "replacement TTBR1 aliases active; TTBR0 retained");' in ttbr0_patch
+assert '+\tsweet_early_mark(28, "TTBR1 active; bootstrap TTBR0 retained");' in ttbr0_patch
 assert '+\tsweet_early_mark(10, "J2 bootstrap TTBR0 retained for bring-up");' in ttbr0_patch
-assert 'TTBR0 must be retired after this transition' in ttbr0_patch
+assert 'retire TTBR0 only' in ttbr0_patch
 print('J2 aliases, relocation ordering, and targeted TTBR0 workaround checks passed')
