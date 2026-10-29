@@ -65,6 +65,9 @@ jobs:
       - name: Validate J2 Prime thread-call panic diagnostics
         run: python3 tools/test_j2prime_thread_call_panic.py
 
+      - name: Validate J2 Prime zero-deadline call handling
+        run: python3 tools/test_j2prime_zero_deadline.py
+
       - name: Validate Xcode 16 IORPC compatibility patch
         run: python3 tools/test_xcode16_iorpc_patch.py
 
@@ -82,7 +85,7 @@ jobs:
           p = Path("dxb/build.sh")
           source = p.read_text()
           old = '                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'
-          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[01]-j2prime-* ]]; then
+          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-2]-j2prime-* ]]; then
                     printf 'Required J2 Prime patch failed: %s\\n%s\\n' "$PATCH" "$APPLY_CHECK" >&2
                     exit 1
                 fi
@@ -149,6 +152,14 @@ jobs:
         run: |
           grep -F 'J2 thread_call deadline invariant:' dxb/xnu/osfmk/kern/thread_call.c
           grep -F 'soft=%llx hard=%llx' dxb/xnu/osfmk/kern/thread_call.c
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('dxb/xnu/osfmk/console/video_console.c').read_text()
+          assert 'if (deadline == 0)' in source
+          assert 'thread_call_enter(call);' in source
+          assert source.count('vc_thread_call_enter_deadline(') == 7
+          assert source.count('thread_call_enter_delayed(') == 1
+          PY
           grep -q 'osfmk/arm64/j2prime_ramconsole.c' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'osfmk/arm64/j2prime_exception_vectors.s' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'j2prime_ramconsole_mark(27)' dxb/xnu/osfmk/arm64/arm_vm_init.c

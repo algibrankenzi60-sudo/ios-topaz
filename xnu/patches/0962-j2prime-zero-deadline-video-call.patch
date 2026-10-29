@@ -1,0 +1,73 @@
+diff --git a/osfmk/console/video_console.c b/osfmk/console/video_console.c
+--- a/osfmk/console/video_console.c
++++ b/osfmk/console/video_console.c
+@@ -2485,6 +2485,20 @@
+ #endif  /* defined(XNU_TARGET_OS_OSX) */
+ }
+ 
++/* A zero absolute deadline is already due. The delayed-call queue forbids
++ * deadline zero, so enqueue J2's boot-graphics tick as immediate work. */
++static inline void
++vc_thread_call_enter_deadline(thread_call_t call, uint64_t deadline)
++{
++#if defined(J2PRIME)
++	if (deadline == 0) {
++		thread_call_enter(call);
++		return;
++	}
++#endif
++	thread_call_enter_delayed(call, deadline);
++}
++
+ void
+ vc_progress_set(boolean_t enable, uint32_t vc_delay)
+ {
+@@ -2524,7 +2538,7 @@
+ 				clock_interval_to_deadline(vc_delay,
+ 				    1000 * 1000 * 1000 /*second scale*/,
+ 				    &vc_progressmeter_deadline);
+-				thread_call_enter_delayed(&vc_progressmeter_call, vc_progressmeter_deadline);
++				vc_thread_call_enter_deadline(&vc_progressmeter_call, vc_progressmeter_deadline);
+ 			} else {
+ 				thread_call_cancel(&vc_progressmeter_call);
+ 			}
+@@ -2599,7 +2613,7 @@
+ 			clock_interval_to_deadline(vc_delay,
+ 			    1000 * 1000 * 1000 /*second scale*/,
+ 			    &vc_progress_deadline);
+-			thread_call_enter_delayed(&vc_progress_call, vc_progress_deadline);
++			vc_thread_call_enter_deadline(&vc_progress_call, vc_progress_deadline);
+ 		} else {
+ 			if (vc_saveunder) {
+ 				saveBuf      = vc_saveunder;
+@@ -2650,7 +2664,7 @@
+ 			interval = ((interval * 256) / vc_progressmeter_diskspeed);
+ 
+ 			clock_deadline_for_periodic_event(interval, mach_absolute_time(), &vc_progressmeter_deadline);
+-			thread_call_enter_delayed(&vc_progressmeter_call, vc_progressmeter_deadline);
++			vc_thread_call_enter_deadline(&vc_progressmeter_call, vc_progressmeter_deadline);
+ 		}
+ 	}
+ 	simple_unlock(&vc_progress_lock);
+@@ -2739,7 +2753,7 @@
+ 			vc_needsave = FALSE;
+ 
+ 			clock_deadline_for_periodic_event(vc_progress_interval, mach_absolute_time(), &vc_progress_deadline);
+-			thread_call_enter_delayed(&vc_progress_call, vc_progress_deadline);
++			vc_thread_call_enter_deadline(&vc_progress_call, vc_progress_deadline);
+ 		}while (FALSE);
+ 	}
+ 	simple_unlock(&vc_progress_lock);
+@@ -2785,10 +2799,10 @@
+ 	if (vc_progress_enable) {
+ #if defined(XNU_TARGET_OS_OSX)
+ 		if (1 & vc_progress_withmeter) {
+-			thread_call_enter_delayed(&vc_progressmeter_call, vc_progressmeter_deadline);
++			vc_thread_call_enter_deadline(&vc_progressmeter_call, vc_progressmeter_deadline);
+ 		} else
+ #endif /* defined(XNU_TARGET_OS_OSX) */
+-		thread_call_enter_delayed(&vc_progress_call, vc_progress_deadline);
++		vc_thread_call_enter_deadline(&vc_progress_call, vc_progress_deadline);
+ 	}
+ 
+ 	simple_unlock(&vc_progress_lock);
