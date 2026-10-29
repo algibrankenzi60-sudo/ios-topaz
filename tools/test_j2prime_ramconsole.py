@@ -61,12 +61,10 @@ assert vm_patch.index("j2prime_early_exception_install();") < vm_patch.index(
 assert vm_patch.index("set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);") < vm_patch.index(
     "sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);")
 assert vm_patch.index("sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);") < vm_patch.index(
-    "j2prime_ramconsole_relocate(J2_EARLY_RAMOOPS_BLOCK_VA);")
-assert vm_patch.index("j2prime_ramconsole_relocate(J2_EARLY_RAMOOPS_BLOCK_VA);") < vm_patch.index(
     'sweet_early_mark(27, "kernel TTBR1 active");')
+assert "j2prime_ramconsole_relocate(J2_EARLY_RAMOOPS_BLOCK_VA);" not in vm_patch
 assert vm_patch.index('sweet_early_mark(27, "kernel TTBR1 active");') < vm_patch.index(
     "j2prime_ramconsole_mark(27);")
-assert "j2prime_ramconsole_relocate(0);" in vm_patch
 assert vm_patch.index("j2prime_ramconsole_mark(27);") < vm_patch.index(
     "j2prime_early_exception_set_phase(30);")
 for marker in ["32", "33", "34", "28"]:
@@ -94,6 +92,7 @@ vectors = patch[patch.index("diff --git a/osfmk/arm64/j2prime_exception_vectors.
 assert ".align 11" in vectors and ".rept 16" in vectors and ".space\t124" in vectors
 for reg in ["esr_el1", "elr_el1", "far_el1", "spsr_el1"]:
     assert f"mrs\tx" in vectors and reg in vectors
+assert "uintptr_t base = (uintptr_t)J2_RAMCONSOLE_BASE;" in section
 
 with tempfile.TemporaryDirectory(prefix="j2-ramconsole-host-") as td:
     tmp = Path(td)

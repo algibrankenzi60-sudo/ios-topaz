@@ -31,7 +31,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/osfmk/arm64/j2prime_ramconsole.c
-@@ -0,0 +1,226 @@
+@@ -0,0 +1,233 @@
 +/* J2 Prime early progress/exception marker in Samsung's reserved RAM console. */
 +#include "j2prime_ramconsole.h"
 +
@@ -187,11 +187,15 @@ index 0000000..0000000
 +	}
 +}
 +
-+/* Switch from the bootstrap identity VA to the explicit TTBR1 block alias. */
++/* Kept for host tests; J2PRIME must not switch this writer to an unverified alias. */
 +void
 +j2prime_ramconsole_relocate(uintptr_t mapped_base)
 +{
++#ifdef J2_RAMCONSOLE_HOST_TEST
 +	j2prime_ramconsole_active_base = mapped_base;
++#else
++	(void)mapped_base;
++#endif
 +#if defined(__aarch64__)
 +	__asm__ volatile("dsb sy\n\tisb" ::: "memory");
 +#else
@@ -245,7 +249,10 @@ index 0000000..0000000
 +	uint32_t phase = j2prime_early_exception_phase & 0xffu;
 +	char line[128];
 +	/* The header marker always survives; full registers append only into free ring space. */
-+	uintptr_t base = j2prime_ramconsole_active_base;
++	/* TTBR0 identity VA remains live during J2 bring-up (patch 0957).
++	 * Never use the TTBR1 ramoops alias here: a fault in that alias is exactly
++	 * what this handler must be able to report. */
++	uintptr_t base = (uintptr_t)J2_RAMCONSOLE_BASE;
 +	j2_store_marker(base,
 +	    j2_exception_marker(esr, phase));
 +	uint32_t length = j2_format_exception(line, phase, esr, elr, far, spsr);
@@ -307,7 +314,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  #endif
  #include <arm/cpu_data_internal.h>
  #include <arm/misc_protos.h>
-@@ -2266,9 +2269,21 @@
+@@ -2266,9 +2269,20 @@
  	arm_vm_physmap_init(args);
  #if defined(J2PRIME)
  	sweet_early_mark(26, "physical map initialized");
@@ -317,13 +324,12 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
  #if defined(J2PRIME)
  	/* TTBR0 is still live: record the transition before changing the pointer. */
-+	/* Move reserved-RAM writers to the TTBR1 alias before touching the region. */
++	/* Keep the exception recorder on its proven TTBR0 identity mapping.
++	 * Only the ordinary SWEET ramoops writer moves to its TTBR1 alias. */
 +	if (j2_early_ramoops_mapped) {
 +		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
-+		j2prime_ramconsole_relocate(J2_EARLY_RAMOOPS_BLOCK_VA);
 +	} else {
 +		sweet_early_disable_ramoops();
-+		j2prime_ramconsole_relocate(0);
 +	}
  	sweet_early_mark(27, "kernel TTBR1 active");
 +	j2prime_ramconsole_mark(27);
