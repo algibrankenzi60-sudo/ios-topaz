@@ -329,7 +329,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 +	j2prime_ramconsole_mark(27);
 +	j2prime_early_exception_set_phase(30);
  #endif
-@@ -2302,18 +2315,20 @@
+@@ -2302,18 +2315,22 @@
  	 * production configuration; TTBR0 must be retired after this transition
  	 * is independently verified.
  	 */
@@ -344,8 +344,10 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  	if (sweet_early_fb_mapped) {
  		sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL);
 -	} else {
++	} else {
  		sweet_early_disable();
 -	}
++	}
 +	j2prime_ramconsole_mark(33);
 +	j2prime_early_exception_set_phase(34);
  	sweet_early_mark(10, "J2 bootstrap TTBR0 retained for bring-up");

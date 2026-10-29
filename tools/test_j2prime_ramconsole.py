@@ -77,6 +77,14 @@ assert vm_patch.index("j2prime_ramconsole_mark(28);") < vm_patch.index(
     "j2prime_early_exception_restore();")
 assert vm_patch.index("j2prime_ramconsole_mark(27);") < vm_patch.index(
     "j2prime_early_exception_set_phase(30);")
+fb_start = vm_patch.index("if (sweet_early_fb_mapped) {")
+fb_end = vm_patch.index("j2prime_ramconsole_mark(33);", fb_start)
+fb_patch = vm_patch[fb_start:fb_end]
+fb_lines = fb_patch.splitlines()
+assert fb_lines.count("-\t} else {") == 1
+assert fb_lines.count("+\t} else {") == 1
+assert fb_lines.count("-\t}") == 1
+assert fb_lines.count("+\t}") == 1
 assert sum(
     line.startswith("+") and "sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);" in line
     for line in vm_patch.splitlines()
