@@ -71,6 +71,9 @@ jobs:
       - name: Validate J2 Prime built-in PRNG registration
         run: python3 tools/test_j2prime_builtin_prng.py
 
+      - name: Validate J2 optional trust-cache runtime
+        run: python3 tools/test_j2prime_optional_trust_cache.py
+
       - name: Validate Xcode 16 IORPC compatibility patch
         run: python3 tools/test_xcode16_iorpc_patch.py
 
@@ -88,7 +91,7 @@ jobs:
           p = Path("dxb/build.sh")
           source = p.read_text()
           old = '                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'
-          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-3]-j2prime-* ]]; then
+          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-4]-j2prime-* ]]; then
                     printf 'Required J2 Prime patch failed: %s\\n%s\\n' "$PATCH" "$APPLY_CHECK" >&2
                     exit 1
                 fi
@@ -170,6 +173,13 @@ jobs:
           assert prng.count('#if defined(SWEET) || defined(J2PRIME)') == 2
           assert 'J2PRIME PRNG: HMAC-SHA256 registered' in prng
           assert entropy.count('#if defined(SWEET) || defined(J2PRIME)') == 5
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          trust = Path('dxb/xnu/bsd/kern/kern_trustcache.c').read_text()
+          assert trust.count('#if defined(SWEET) || defined(J2PRIME)') == 6
+          assert 'if (img4if == NULL || amfi == NULL)' in trust
+          assert 'J2PRIME: trust caches unavailable' in trust
           PY
           grep -q 'osfmk/arm64/j2prime_ramconsole.c' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'osfmk/arm64/j2prime_exception_vectors.s' dxb/xnu/osfmk/conf/files.arm64
