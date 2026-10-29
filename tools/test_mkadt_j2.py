@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the J2 ADT carries the boot entropy XNU requires during VM init."""
+"""Verify XNU-required entropy and the J2 pmap bootstrap ADT paths."""
 import importlib.util
 import os
 import sys
@@ -32,6 +32,14 @@ chosen = find(decoded, 'chosen')
 assert chosen is not None
 assert chosen.prop('random-seed') == seed
 
+defaults = [node for node in decoded.children if node.name == 'defaults']
+assert len(defaults) == 1, "XNU pmap requires exactly one root /defaults node"
+props = {name: value for name, _flags, value in defaults[0].props}
+assert props['name'] == b'defaults\0'
+assert 'AAPL,phandle' in props
+assert 'pmap-max-asids' not in props, "leave XNU's compiled-in MAX_ASIDS default intact"
+assert 'pmap-pv-count' not in props, "leave XNU's compiled-in PV defaults intact"
+
 for invalid in (b'', bytes(64), bytes(63), bytes(65)):
     try:
         mkadt_j2.build(invalid)
@@ -40,4 +48,4 @@ for invalid in (b'', bytes(64), bytes(63), bytes(65)):
     else:
         raise AssertionError(f'invalid random seed accepted: {len(invalid)} bytes')
 
-print('J2 ADT includes a nonzero 64-byte /chosen/random-seed; invalid sizes rejected')
+print('J2 ADT has nonzero /chosen/random-seed and root /defaults with stock pmap defaults')

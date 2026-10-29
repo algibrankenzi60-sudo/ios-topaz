@@ -176,10 +176,14 @@ def build(random_seed=None):
     fbcon = node('fbcon', [ph(), ('reg', u64(FB, FB_SIZE)), ('width', u32(FB_W)),
         ('height', u32(FB_H)), ('rowBytes', u32(FB_STRIDE)), ('depth', u32(32)),
         ('pixel-format', cstr('ARGB8888'))])
+    # XNU's arm64 pmap bootstrap requires this path even when no defaults are
+    # overridden: pmap_compute_max_asids() asserts that /defaults exists, then
+    # falls back to its compiled-in MAX_ASIDS when the property is absent.
+    defaults = node('defaults', [ph()])
     return node('device-tree', [ph(), ('compatible', cstr('samsung,sm-g532g') +
         cstr('samsung,grand-prime-plus') + cstr('mediatek,mt6737t') + cstr('J2PRIME')),
         ('model', cstr('Samsung Galaxy J2 Prime SM-G532G')), ('manufacturer', cstr('Samsung')),
-        ('#address-cells', u32(2)), ('#size-cells', u32(2))], [chosen, cpus, armio, fbcon])
+        ('#address-cells', u32(2)), ('#size-cells', u32(2))], [chosen, cpus, armio, fbcon, defaults])
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()

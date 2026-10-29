@@ -48,6 +48,7 @@ PY
 IOMEM_ARGS=()
 if [[ -n "${J2_IOMEM:-}" ]]; then IOMEM_ARGS=(--iomem "$J2_IOMEM"); fi
 python3 "$ROOT/tools/mkadt_j2.py" "$BUILD/j2prime.adt" --audit-json "$BUILD/ram-audit.json" "${IOMEM_ARGS[@]}"
+python3 "$ROOT/tools/test_mkadt_j2.py"
 python3 "$ROOT/tools/mkpayload_j2.py" "$KERNEL" "$BUILD/j2prime.adt" "$BUILD/j2prime.payload" \
   --source-window 0x80000000 0x81000000 --report "$BUILD/payload-report.json"
 python3 - "$SHIM" "$BUILD/loader-padded.bin" "$BUILD/j2prime-recovery-kernel.bin" <<'PY'
