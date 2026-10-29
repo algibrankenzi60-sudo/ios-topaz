@@ -307,7 +307,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  #endif
  #include <arm/cpu_data_internal.h>
  #include <arm/misc_protos.h>
-@@ -2266,12 +2269,32 @@
+@@ -2266,9 +2269,21 @@
  	arm_vm_physmap_init(args);
  #if defined(J2PRIME)
  	sweet_early_mark(26, "physical map initialized");
@@ -327,31 +327,25 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 +	}
  	sweet_early_mark(27, "kernel TTBR1 active");
 +	j2prime_ramconsole_mark(27);
-+#endif
-+
-+#if defined(J2PRIME)
 +	j2prime_early_exception_set_phase(30);
-+#endif
- 	ml_enable_monitor();
-+#if defined(J2PRIME)
-+	j2prime_early_exception_set_phase(31);
-+	j2prime_ramconsole_mark(31);
-+#endif
- 
- #if (defined(SWEET) && defined(TOPAZ_4K)) || defined(J2PRIME)
- #if !defined(J2PRIME)
-@@ -2302,13 +2315,22 @@
+ #endif
+@@ -2302,18 +2315,20 @@
  	 * production configuration; TTBR0 must be retired after this transition
  	 * is independently verified.
  	 */
 +	j2prime_early_exception_set_phase(32);
 +	j2prime_ramconsole_mark(32);
 +	j2prime_early_exception_set_phase(33);
+-	if (j2_early_ramoops_mapped) {
+-		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);
+-	} else {
+-		sweet_early_disable_ramoops();
+-	}
  	if (sweet_early_fb_mapped) {
  		sweet_early_relocate(SWEET_EARLY_FB_VA + 0x100000ULL);
- 	} else {
+-	} else {
  		sweet_early_disable();
- 	}
+-	}
 +	j2prime_ramconsole_mark(33);
 +	j2prime_early_exception_set_phase(34);
  	sweet_early_mark(10, "J2 bootstrap TTBR0 retained for bring-up");

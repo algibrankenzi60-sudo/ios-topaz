@@ -72,6 +72,22 @@ jobs:
           git -C dxb checkout -q FETCH_HEAD
           # 12.5-14.3 use the top-level patches dir; ours go next to blacktop's
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
+          # The upstream helper normally warns and continues when a patch does not apply.
+          # Fail before the expensive build if any required J2 patch is skipped.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("dxb/build.sh")
+          source = p.read_text()
+          old = '                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'
+          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* ]]; then
+                    printf 'Required J2 Prime patch failed: %s\\n%s\\n' "$PATCH" "$APPLY_CHECK" >&2
+                    exit 1
+                fi
+                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'''
+          if source.count(old) != 1:
+              raise SystemExit("Pinned build.sh patch-skip clause changed; refusing an unverified rewrite")
+          p.write_text(source.replace(old, new))
+          PY
           # libfirehose_kernel is built arm64e-only; the SWEET kernel is plain arm64.
           # topaz: Cortex-A53/A73 (ARMv8.0), so the same -mcpu as the kernel
           # (clang's apple-m1 default emits LSE atomics and LDAPR)
@@ -129,6 +145,7 @@ jobs:
         if: github.ref == 'refs/heads/codex/j2prime-early-bringup' || inputs.machine_config == 'J2PRIME'
         run: |
           grep -q 'osfmk/arm64/j2prime_ramconsole.c' dxb/xnu/osfmk/conf/files.arm64
+          grep -q 'osfmk/arm64/j2prime_exception_vectors.s' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'j2prime_ramconsole_mark(27)' dxb/xnu/osfmk/arm64/arm_vm_init.c
           python3 - <<'PY'
           source = open('dxb/xnu/iokit/DriverKit/IORPC.h').read()
@@ -144,9 +161,16 @@ jobs:
           assert source.rfind('#ifdef KERNEL', start, field) > start
           assert source.index('#endif /* KERNEL */', field, end) < end
           PY
-          test -f dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/j2prime_ramconsole.d
-          nm -gU dxb/fakeroot/System/Library/Kernels/kernel.development.j2prime | grep -Fq '_j2prime_early_exception_record'
-          nm -gU dxb/fakeroot/System/Library/Kernels/kernel.development.j2prime | grep -Fq '_j2prime_early_vectors'
+          python3 - <<'PY'
+          from pathlib import Path
+          makefile = Path("dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/Makefile").read_text()
+          assert "j2prime_ramconsole.o" in makefile
+          assert "j2prime_exception_vectors.o" in makefile
+          assert Path("dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/j2prime_ramconsole.d").is_file()
+          PY
+          nm -gU dxb/fakeroot/System/Library/Kernels/kernel.development.j2prime > j2prime-kernel-symbols.txt
+          grep -F '_j2prime_early_exception_record' j2prime-kernel-symbols.txt >/dev/null
+          grep -F '_j2prime_early_vectors' j2prime-kernel-symbols.txt >/dev/null
 
       - name: Package build tree for local compiles
         if: always()

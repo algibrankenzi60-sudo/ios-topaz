@@ -69,12 +69,18 @@ assert vm_patch.index('sweet_early_mark(27, "kernel TTBR1 active");') < vm_patch
 assert "j2prime_ramconsole_relocate(0);" in vm_patch
 assert vm_patch.index("j2prime_ramconsole_mark(27);") < vm_patch.index(
     "j2prime_early_exception_set_phase(30);")
-for marker in ["31", "32", "33", "34", "28"]:
+for marker in ["32", "33", "34", "28"]:
     assert f"j2prime_ramconsole_mark({marker});" in vm_patch
 assert vm_patch.index("j2prime_ramconsole_mark(34);") < vm_patch.index(
     'sweet_early_mark(28, "replacement TTBR1 aliases active; TTBR0 retained");')
 assert vm_patch.index("j2prime_ramconsole_mark(28);") < vm_patch.index(
     "j2prime_early_exception_restore();")
+assert vm_patch.index("j2prime_ramconsole_mark(27);") < vm_patch.index(
+    "j2prime_early_exception_set_phase(30);")
+assert sum(
+    line.startswith("+") and "sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);" in line
+    for line in vm_patch.splitlines()
+) == 1
 
 vectors = patch[patch.index("diff --git a/osfmk/arm64/j2prime_exception_vectors.s"):]
 assert ".align 11" in vectors and ".rept 16" in vectors and ".space\t124" in vectors
