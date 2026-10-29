@@ -145,7 +145,7 @@ jobs:
           assert source.index('#endif /* KERNEL */', field, end) < end
           PY
           test -f dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/j2prime_ramconsole.d
-          strings dxb/fakeroot/System/Library/Kernels/kernel.development.j2prime | grep -Fq 'J2XNU EXC phase='
+          strings -a dxb/fakeroot/System/Library/Kernels/kernel.development.j2prime | grep -Fq 'J2XNU EXC phase='
 
       - name: Package build tree for local compiles
         if: always()
