@@ -1,0 +1,97 @@
+diff --git a/osfmk/prng/entropy.c b/osfmk/prng/entropy.c
+index 42286ed..06b9444 100755
+--- a/osfmk/prng/entropy.c
++++ b/osfmk/prng/entropy.c
+@@ -40,7 +40,7 @@
+ #include <machine/machine_routines.h>
+ #include <libkern/section_keywords.h>
+ #include <sys/cdefs.h>
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ #include <corecrypto/ccdigest.h>
+ #include <corecrypto/ccsha2.h>
+ #endif
+@@ -97,7 +97,7 @@ typedef struct entropy_data {
+ 	// State for a SHA256 computation. This is used to accumulate
+ 	// entropy samples from across all CPUs. It is finalized when
+ 	// entropy is provided to the consumer of this module.
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ 	ccdigest_ctx_decl(CCSHA256_STATE_SIZE, CCSHA256_BLOCK_SIZE, sha256_ctx);
+ #else
+ 	SHA256_CTX sha256_ctx;
+@@ -478,11 +478,11 @@ entropy_health_test(uint32_t sample_count, entropy_sample_t *samples, __assert_o
+ 	return result;
+ }
+ 
+-/* SWEET uses the same built-in digest as early_random, without a kext. */
++/* SWEET/J2PRIME use the built-in digest as early_random does, without a kext. */
+ static void
+ entropy_hash_init(void)
+ {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ 	ccdigest_init(&ccsha256_ltc_di, entropy_data.sha256_ctx);
+ #else
+ 	SHA256_Init(&entropy_data.sha256_ctx);
+@@ -492,7 +492,7 @@ entropy_hash_init(void)
+ static void
+ entropy_hash_update(const void *data, size_t nbytes)
+ {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ 	ccdigest_update(&ccsha256_ltc_di, entropy_data.sha256_ctx, nbytes, data);
+ #else
+ 	SHA256_Update(&entropy_data.sha256_ctx, data, nbytes);
+@@ -502,7 +502,7 @@ entropy_hash_update(const void *data, size_t nbytes)
+ static void
+ entropy_hash_final(void *out)
+ {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ 	ccdigest_final(&ccsha256_ltc_di, entropy_data.sha256_ctx, out);
+ 	ccdigest_ctx_clear(CCSHA256_STATE_SIZE, CCSHA256_BLOCK_SIZE, entropy_data.sha256_ctx);
+ #else
+diff --git a/osfmk/prng/prng_random.c b/osfmk/prng/prng_random.c
+index c53d45d..298ab6c 100755
+--- a/osfmk/prng/prng_random.c
++++ b/osfmk/prng/prng_random.c
+@@ -145,10 +145,10 @@ static struct {
+ 		     .strictFIPS = 0,
+ 	     }};
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ /*
+- * The corecrypto kext normally installs the kernel PRNG. SWEET has no such
+- * kext: use the built-in HMAC-SHA256 DRBG, just as early_random does. A
++ * The corecrypto kext normally installs the kernel PRNG. SWEET and J2PRIME
++ * have no such kext: use the built-in HMAC-SHA256 DRBG, just as early_random does. A
+  * single mutex serializes generation and reseeding across all CPUs. This
+  * favors a small, auditable bring-up implementation over per-CPU scaling.
+  * This registers only the PRNG, not the unrelated g_crypto_funcs table.
+@@ -274,10 +274,14 @@ sweet_prng_startup(void)
+ 		.init_with_getentropy = sweet_prng_init_with_getentropy,
+ 	};
+ 	register_and_init_prng(&sweet_prng_ctx, &funcs);
++#if defined(J2PRIME)
++	kprintf("J2PRIME PRNG: HMAC-SHA256 registered\n");
++#else
+ 	kprintf("SWEET PRNG: HMAC-SHA256 registered\n");
++#endif
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_FIRST, sweet_prng_startup);
+-#endif /* SWEET */
++#endif /* SWEET || J2PRIME */
+ 
+ static void read_erandom(void * buf, size_t nbytes);
+ 
+@@ -473,7 +477,7 @@ int
+ write_random(void * buffer, u_int numbytes)
+ {
+ 	uint8_t seed[SHA256_DIGEST_LENGTH];
+-#if defined(SWEET)
++#if defined(SWEET) || defined(J2PRIME)
+ 	/* Hash without depending on the absent corecrypto kext's dispatch table. */
+ 	const struct ccdigest_info *di = &ccsha256_ltc_di;
+ 	ccdigest_di_decl(di, ctx);

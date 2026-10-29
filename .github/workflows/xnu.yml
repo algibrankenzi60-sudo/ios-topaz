@@ -68,6 +68,9 @@ jobs:
       - name: Validate J2 Prime zero-deadline call handling
         run: python3 tools/test_j2prime_zero_deadline.py
 
+      - name: Validate J2 Prime built-in PRNG registration
+        run: python3 tools/test_j2prime_builtin_prng.py
+
       - name: Validate Xcode 16 IORPC compatibility patch
         run: python3 tools/test_xcode16_iorpc_patch.py
 
@@ -85,7 +88,7 @@ jobs:
           p = Path("dxb/build.sh")
           source = p.read_text()
           old = '                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'
-          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-2]-j2prime-* ]]; then
+          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-3]-j2prime-* ]]; then
                     printf 'Required J2 Prime patch failed: %s\\n%s\\n' "$PATCH" "$APPLY_CHECK" >&2
                     exit 1
                 fi
@@ -160,6 +163,14 @@ jobs:
           assert source.count('vc_thread_call_enter_deadline(') == 7
           assert source.count('thread_call_enter_delayed(') == 1
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          prng = Path('dxb/xnu/osfmk/prng/prng_random.c').read_text()
+          entropy = Path('dxb/xnu/osfmk/prng/entropy.c').read_text()
+          assert prng.count('#if defined(SWEET) || defined(J2PRIME)') == 2
+          assert 'J2PRIME PRNG: HMAC-SHA256 registered' in prng
+          assert entropy.count('#if defined(SWEET) || defined(J2PRIME)') == 5
+          PY
           grep -q 'osfmk/arm64/j2prime_ramconsole.c' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'osfmk/arm64/j2prime_exception_vectors.s' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'j2prime_ramconsole_mark(27)' dxb/xnu/osfmk/arm64/arm_vm_init.c
@@ -196,6 +207,9 @@ jobs:
           assert '((struct sweet_kmem_rng *)ctx)->state = early_random();' in source
           assert 'sweet_kmem_uniform(zpercpu_get(sizeclass.ks_rng_ctx), num_slots)' in source
           PY
+          PRNG_OBJ=dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/prng_random.o
+          test -f "$PRNG_OBJ"
+          nm "$PRNG_OBJ" | grep -E 'sweet_prng_startup' >/dev/null
           # The J2 object must not call unregistered corecrypto kmem callbacks.
           VM_KERN_OBJ=dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/vm_kern.o
           test -f "$VM_KERN_OBJ"
