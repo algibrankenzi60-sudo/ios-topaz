@@ -79,7 +79,7 @@ jobs:
           p = Path("dxb/build.sh")
           source = p.read_text()
           old = '                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'
-          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* ]]; then
+          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 0960-j2prime-* ]]; then
                     printf 'Required J2 Prime patch failed: %s\\n%s\\n' "$PATCH" "$APPLY_CHECK" >&2
                     exit 1
                 fi
@@ -171,6 +171,22 @@ jobs:
           nm -gU dxb/fakeroot/System/Library/Kernels/kernel.development.j2prime > j2prime-kernel-symbols.txt
           grep -F '_j2prime_early_exception_record' j2prime-kernel-symbols.txt >/dev/null
           grep -F '_j2prime_early_vectors' j2prime-kernel-symbols.txt >/dev/null
+          # Verify that the J2 config selects all four allocator RNG fallback sites.
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('dxb/xnu/osfmk/vm/vm_kern.c').read_text()
+          assert source.count('#if defined(SWEET) || defined(J2PRIME)') == 4
+          assert 'vm_size_t ctx_size = sizeof(struct sweet_kmem_rng);' in source
+          assert '((struct sweet_kmem_rng *)ctx)->state = early_random();' in source
+          assert 'sweet_kmem_uniform(zpercpu_get(sizeclass.ks_rng_ctx), num_slots)' in source
+          PY
+          # The J2 object must not call unregistered corecrypto kmem callbacks.
+          VM_KERN_OBJ=dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/osfmk/DEVELOPMENT/vm_kern.o
+          test -f "$VM_KERN_OBJ"
+          if nm -u "$VM_KERN_OBJ" | grep -E 'crypto_random_kmem_ctx_size|crypto_random_kmem_init|crypto_random_uniform'; then
+            echo 'J2 vm_kern.o still references the unavailable corecrypto kmem RNG' >&2
+            exit 1
+          fi
 
       - name: Package build tree for local compiles
         if: always()
