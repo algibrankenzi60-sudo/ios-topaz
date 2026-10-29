@@ -1,7 +1,7 @@
 diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
-@@ -2288,11 +2288,20 @@
+@@ -2288,11 +2288,19 @@
  	/* The final TTBR1 is live; leave the outgoing VA=PA framebuffer alias. */
  	sweet_early_relocate(SWEET_EARLY_FB_VA);
  #endif
@@ -18,7 +18,6 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 +	 * bootstrap identity mappings. The prior image stopped after marker 27.
 +	 * Do not use this mode as a production configuration; retire TTBR0 only
 +	 * after the new mapping transition is independently verified.
-+	 * is independently verified.
 +	 */
  	if (j2_early_ramoops_mapped) {
  		sweet_early_relocate_ramoops(J2_EARLY_RAMOOPS_VA);

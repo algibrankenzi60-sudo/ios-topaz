@@ -331,8 +331,10 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 +	j2prime_early_exception_set_phase(30);
  #endif
 @@ -2302,18 +2315,17 @@
- 	 * production configuration; TTBR0 must be retired after this transition
- 	 * is independently verified.
+-	 * Do not use this mode as a production configuration; retire TTBR0 only
++	 * Do not use this mode as a production configuration; retire TTBR0 only
+-	 * after the new mapping transition is independently verified.
++	 * after the new mapping transition is independently verified.
  	 */
 +	j2prime_early_exception_set_phase(32);
 +	j2prime_ramconsole_mark(32);
