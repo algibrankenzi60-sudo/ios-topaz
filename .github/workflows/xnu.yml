@@ -92,24 +92,24 @@ jobs:
           source = p.read_text()
           old_clone = '        git clone --branch "${XNU_VERSION}" https://github.com/apple-oss-distributions/xnu.git "${WORK_DIR}/xnu"'
           new_clone = '''        # XNU is a large repository; GitHub-hosted runners occasionally lose the
-        # HTTP/2 stream partway through the initial packfile. Fetch only the
-        # release tag, use HTTP/1.1, and retry from a clean destination.
-        clone_ok=0
-        for attempt in 1 2 3; do
-            rm -rf "${WORK_DIR}/xnu"
-            if git -c http.version=HTTP/1.1 -c http.lowSpeedLimit=0 \\
-                clone --depth 1 --single-branch --branch "${XNU_VERSION}" \\
-                https://github.com/apple-oss-distributions/xnu.git "${WORK_DIR}/xnu"; then
-                clone_ok=1
-                break
-            fi
-            warning "XNU clone attempt ${attempt}/3 failed; retrying"
-            sleep $((attempt * 5))
-        done
-        if [ "${clone_ok}" -ne 1 ]; then
-            error "Unable to fetch XNU release ${XNU_VERSION} after 3 attempts"
-            return 1
-        fi'''
+          # HTTP/2 stream partway through the initial packfile. Fetch only the
+          # release tag, use HTTP/1.1, and retry from a clean destination.
+          clone_ok=0
+          for attempt in 1 2 3; do
+              rm -rf "${WORK_DIR}/xnu"
+              if git -c http.version=HTTP/1.1 -c http.lowSpeedLimit=0 \\
+                  clone --depth 1 --single-branch --branch "${XNU_VERSION}" \\
+                  https://github.com/apple-oss-distributions/xnu.git "${WORK_DIR}/xnu"; then
+                  clone_ok=1
+                  break
+              fi
+              warning "XNU clone attempt ${attempt}/3 failed; retrying"
+              sleep $((attempt * 5))
+          done
+          if [ "${clone_ok}" -ne 1 ]; then
+              error "Unable to fetch XNU release ${XNU_VERSION} after 3 attempts"
+              return 1
+          fi'''
           if source.count(old_clone) != 1:
               raise SystemExit("Pinned build.sh XNU clone command changed; refusing an unverified rewrite")
           source = source.replace(old_clone, new_clone)
