@@ -173,8 +173,11 @@ def build(random_seed=None):
         ('compatible', cstr('j2prime,mt6737t-io') + cstr('arm-io')),
         ('#address-cells', u32(2)), ('#size-cells', u32(2)),
         ('ranges', u64(0, SOC_BASE, 0x100000000-SOC_BASE))], [gic])
-    fbcon = node('fbcon', [ph(), ('reg', u64(FB, FB_SIZE)), ('width', u32(FB_W)),
-        ('height', u32(FB_H)), ('rowBytes', u32(FB_STRIDE)), ('depth', u32(32)),
+    # pe_serial.c's fbcon_probe() looks up the exact ADT name `sweet-fbcon`
+    # and reads `stride` (not the Apple/DT `rowBytes` spelling). Keep the
+    # framebuffer's measured dimensions and physical range unchanged.
+    fbcon = node('sweet-fbcon', [ph(), ('reg', u64(FB, FB_SIZE)), ('width', u32(FB_W)),
+        ('height', u32(FB_H)), ('stride', u32(FB_STRIDE)), ('depth', u32(32)),
         ('pixel-format', cstr('ARGB8888'))])
     # XNU's arm64 pmap bootstrap requires this path even when no defaults are
     # overridden: pmap_compute_max_asids() asserts that /defaults exists, then

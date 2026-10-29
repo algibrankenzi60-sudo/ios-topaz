@@ -32,6 +32,14 @@ chosen = find(decoded, 'chosen')
 assert chosen is not None
 assert chosen.prop('random-seed') == seed
 
+fbcon = find(decoded, 'sweet-fbcon')
+assert fbcon is not None, "XNU pe_serial fbcon_probe requires the exact sweet-fbcon name"
+fbcon_props = {name: value for name, _flags, value in fbcon.props}
+assert fbcon_props['reg'] == mkadt_j2.u64(mkadt_j2.FB, mkadt_j2.FB_SIZE)
+assert fbcon_props['width'] == mkadt_j2.u32(mkadt_j2.FB_W)
+assert fbcon_props['height'] == mkadt_j2.u32(mkadt_j2.FB_H)
+assert fbcon_props['stride'] == mkadt_j2.u32(mkadt_j2.FB_STRIDE)
+
 defaults = [node for node in decoded.children if node.name == 'defaults']
 assert len(defaults) == 1, "XNU pmap requires exactly one root /defaults node"
 props = {name: value for name, _flags, value in defaults[0].props}
