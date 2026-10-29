@@ -429,6 +429,10 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - XNU VMAPPLE PSCI uses `hvc`; sweet needs `smc`.
 - PocketDarwin NonAppleGenericCpu.patch only swaps -mcpu=apple-h7 for -march=armv8-a.
 
+## CI runner portability (2026-10-29)
+- GitHub repeatedly failed to allocate the standard macOS 14 ARM64 runner before any build step ran.
+- XNU 8796's `IORPC` predates the kernel-only `IORPC.kernelContent` member used by Xcode 16's `iig` output. Backport that exact field and use the standard `macos-15-intel` runner to avoid relying on the constrained ARM64 pool. The first CI run must confirm the full Xcode 16 compatibility; allocation failures are not compilation evidence.
+
 ## Milestone 3 (2026-10-14): 16K MMU verified
 - ABL loads the Image at 0x80080000 (base 0x80000000 + 0x80000) regardless of text_offset=0.
 - 16K granule, T0SZ=28 (L2 start, 32MB blocks), MAIR 0x44ff00, TCR 0x1409CB51C, PARange=2 (40-bit PA).

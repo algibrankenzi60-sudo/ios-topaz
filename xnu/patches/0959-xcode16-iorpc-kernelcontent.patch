@@ -1,0 +1,8 @@
+diff --git a/iokit/DriverKit/IORPC.h b/iokit/DriverKit/IORPC.h
+index 0000000..0000000 100644
+--- a/iokit/DriverKit/IORPC.h
++++ b/iokit/DriverKit/IORPC.h
+@@ -208,0 +209,3 @@
++#ifdef KERNEL
++	IORPCMessage     * kernelContent;
++#endif /* KERNEL */

@@ -77,7 +77,7 @@ You need a Redmi Note 12 4G (`topaz`/`tapas`, SM6225) with an **unlocked bootloa
 
 ### 1. Build the kernel
 
-The kernel builds on GitHub's macOS runners (macos-14, Xcode 15) with [blacktop/darwin-xnu-build](https://github.com/blacktop/darwin-xnu-build); newer Xcode's `iig` does not match the xnu-8796 IORPC ABI. Fork the repo and run, on the `topaz` branch:
+The kernel workflow uses GitHub's `macos-15-intel` runner and Xcode 16 with [blacktop/darwin-xnu-build](https://github.com/blacktop/darwin-xnu-build). Patch `0959-xcode16-iorpc-kernelcontent.patch` backports the kernel-only `IORPC.kernelContent` field required by Xcode 16's `iig`. Fork the repo and run, on the `topaz` branch:
 
 ```sh
 gh workflow run xnu.yml -R YOU/ios-topaz --ref topaz
