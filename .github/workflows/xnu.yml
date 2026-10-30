@@ -215,6 +215,7 @@ jobs:
           files = Path('dxb/xnu/iokit/conf/files.arm64').read_text()
           config = Path('dxb/xnu/config/MASTER.arm64.j2prime').read_text()
           assert "'IONameMatch'     = 'samsung,j2prime';" in tables
+          assert "'IONameMatch'     = 'samsung,sm-g532g';" in tables
           assert "'IOClass'         = J2PrimePlatformExpert;" in tables
           assert 'class J2PrimePlatformExpert : public IODTPlatformExpert' in expert
           assert 'J2PrimePlatformExpert::processTopLevel' in expert

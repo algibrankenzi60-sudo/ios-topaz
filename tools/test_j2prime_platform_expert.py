@@ -7,6 +7,7 @@ checks = (
     "#if defined(ARM64_BOARD_CONFIG_J2PRIME)",
     "'IOClass'         = J2PrimePlatformExpert;",
     "'IONameMatch'     = 'samsung,j2prime';",
+    "'IONameMatch'     = 'samsung,sm-g532g';",
     "options j2prime_platform",
     "J2PrimePlatformExpert.cpp                  optional iokitcpp j2prime_platform",
     "class J2PrimePlatformExpert : public IODTPlatformExpert",

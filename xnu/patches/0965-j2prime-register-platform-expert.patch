@@ -1,6 +1,6 @@
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
-@@ -83,6 +83,14 @@
+@@ -83,6 +83,20 @@
      "     'IOMatchCategory' = SweetBattery;"
      "   },"
  #endif
@@ -9,6 +9,12 @@
 +    "     'IOClass'         = J2PrimePlatformExpert;"
 +    "     'IOProviderClass' = IOPlatformExpertDevice;"
 +    "     'IONameMatch'     = 'samsung,j2prime';"
++    "     'IOProbeScore'    = 10000:32;"
++    "   },"
++    "   {"
++    "     'IOClass'         = J2PrimePlatformExpert;"
++    "     'IOProviderClass' = IOPlatformExpertDevice;"
++    "     'IONameMatch'     = 'samsung,sm-g532g';"
 +    "     'IOProbeScore'    = 10000:32;"
 +    "   },"
 +#endif
