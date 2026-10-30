@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline structural and content validation of the J2 recovery boot image."""
+"""Offline structural and content validation of a J2 Android boot image."""
 import hashlib
 import struct
 import sys
@@ -22,10 +22,10 @@ if len(sys.argv) != 5:
 image_path, loader_path, backup_path, payload_path = map(Path, sys.argv[1:])
 image, loader, backup, expected_payload = (p.read_bytes() for p in (image_path, loader_path, backup_path, payload_path))
 if len(image) != PARTITION or image[:8] != b"ANDROID!":
-    raise SystemExit("not a 16 MiB Android recovery boot image")
+    raise SystemExit("not a 16 MiB Android boot image")
 kernel_size, kernel_addr, ramdisk_size, ramdisk_addr, second_size, _, _, page_size, dt_size = struct.unpack_from("<9I", image, 8)
 if (kernel_addr, ramdisk_addr, page_size) != (0x40004000, 0x44000000, PAGE) or second_size:
-    raise SystemExit("unexpected Samsung recovery load contract")
+    raise SystemExit("unexpected Samsung boot-image load contract")
 kernel_off = PAGE
 ramdisk_off = kernel_off + align(kernel_size)
 dtb_off = ramdisk_off + align(ramdisk_size)
@@ -80,7 +80,7 @@ if stage_lo < boot_args_end and kernel_end_pa < stage_hi:
     raise SystemExit("decompression stage overlaps kernel-end ADT/boot_args allocation")
 
 if len(backup) != PARTITION or backup[:8] != b"ANDROID!":
-    raise SystemExit("backup is not the verified original recovery image")
+    raise SystemExit("backup is not a 16 MiB Android boot image")
 orig_fields = struct.unpack_from("<9I", backup, 8)
 orig_dtb_off = PAGE + align(orig_fields[0]) + align(orig_fields[2]) + align(orig_fields[4])
 original_dtb = backup[orig_dtb_off : orig_dtb_off + orig_fields[8]]
@@ -91,7 +91,7 @@ if dtb[:4] != b"DTBH":
     raise SystemExit("unexpected appended DTB format")
 used_end = dtb_off + dt_size
 if used_end > PARTITION:
-    raise SystemExit("boot image components exceed recovery partition")
+    raise SystemExit("boot image components exceed the partition limit")
 print(f"image_sha256={hashlib.sha256(image).hexdigest()}")
 print(f"kernel_bytes={kernel_size} loader=0x40008000 ramdisk=0x44000000 compressed={compressed} expanded={expanded}")
 print(f"XNU_entry_va={entry_va:#x} XNU_entry_pa={entry_pa:#x} cold_entry=physical/MMU-off")
