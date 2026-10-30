@@ -23,6 +23,7 @@ on:
     branches: [main, "codex/j2prime-early-bringup"]
     paths:
       - "xnu/patches/**"
+      - "tools/test_j2prime_*.py"
       - ".github/workflows/xnu.yml"
 
 
