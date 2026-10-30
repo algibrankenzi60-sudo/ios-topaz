@@ -1,0 +1,17 @@
+diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
+--- a/osfmk/arm/arm_init.c
++++ b/osfmk/arm/arm_init.c
+@@ -543,8 +543,13 @@
+ 	kernel_startup_initialize_upto(STARTUP_SUB_KPRINTF);
+ 	kprintf("kprintf initialized\n");
+ 	sweet_early_mark(20, "kprintf startup complete");
+ 	if (serial_exists) {
++#if defined(J2PRIME)
++		/* Keep the validated framebuffer console for J2 IOKit bring-up markers. */
++		/* J2's early framebuffer has a live TTBR1 alias and remains mapped. */
++#else
+ 		sweet_early_disable();
++#endif
+ 	}
+ 
+ 	serialmode = 0;
