@@ -84,6 +84,9 @@ jobs:
       - name: Validate J2 IOKit startup checkpoints
         run: python3 tools/test_j2prime_iokit_checkpoints.py
 
+      - name: Validate J2 root service matching checkpoints
+        run: python3 tools/test_j2prime_root_service_checkpoints.py
+
       - name: Validate Xcode 16 IORPC compatibility patch
         run: python3 tools/test_xcode16_iorpc_patch.py
 
@@ -124,7 +127,7 @@ jobs:
               raise SystemExit("Pinned build.sh XNU clone command changed; refusing an unverified rewrite")
           source = source.replace(old_clone, new_clone)
           old = '                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'
-          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-7]-j2prime-* ]]; then
+          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-8]-j2prime-* ]]; then
                     printf 'Required J2 Prime patch failed: %s\\n%s\\n' "$PATCH" "$APPLY_CHECK" >&2
                     exit 1
                 fi

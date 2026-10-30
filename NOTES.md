@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## J2 Prime: next IOKit transition (2026-10-31)
+
+After the user photo showed `J2 processTopLevel done`, source tracing found the next XNU operation: `StartIOKitMatching()` calls `IOPlatformExpertDevice::startIOServiceMatching()`, which creates an `IOWorkLoop` and calls `registerService()` on the root nub. The existing run-43 patch marks entry/return of `StartIOKitMatching`, but the photo's visible sequence does not establish whether the root nub registration returned; its missing outer return marker is consistent with several outcomes and is not proof of a hang by itself.
+
+Added patch `0968-j2prime-root-service-matching-checkpoints.patch` with J2PRIME-only markers before/after work-loop creation and root service registration. It does not change control flow, create fake services, or touch storage. The workflow now treats 0968 as required and runs a focused static regression check. `git apply --check` against the locally available XNU 8796 tree, tests `test_j2prime_iokit_checkpoints.py` and `test_j2prime_root_service_checkpoints.py`, and `git diff --check` pass. Full XNU compile/link and device behavior are not yet verified; do not claim this patch fixes the startup issue. This milestone does not run a payload or write a partition. Commit `c220eb5` (and its amended descendant) is local on `codex/j2prime-early-bringup`; push was attempted but this environment has no GitHub HTTPS credentials (`could not read Username`).
+
 ## J2 Prime storage audit (2026-10-31)
 
 The user's latest screen photo shows the J2 platform expert's `ConfigureIOKit`, `StartIOKitMatching`, and `processTopLevel` checkpoints returning successfully. It does **not** establish that the CPU froze in BSD or at eMMC initialization; the last printed checkpoint is not necessarily the fault site.

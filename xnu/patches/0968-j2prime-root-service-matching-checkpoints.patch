@@ -1,0 +1,18 @@
+diff --git a/iokit/Kernel/IOPlatformExpert.cpp b/iokit/Kernel/IOPlatformExpert.cpp
+--- a/iokit/Kernel/IOPlatformExpert.cpp
++++ b/iokit/Kernel/IOPlatformExpert.cpp
+@@ -76,0 +77,1 @@
++extern "C" void sweet_early_mark(unsigned int stage, const char *label);
+@@ -2058,0 +2059,3 @@
++#if defined(J2PRIME)
++	sweet_early_mark(16, "J2 root workloop create entered");
++#endif
+@@ -2063,0 +2067,4 @@
++#if defined(J2PRIME)
++	sweet_early_mark(17, "J2 root workloop create returned");
++	sweet_early_mark(18, "J2 root service register entered");
++#endif
+@@ -2064,0 +2072,3 @@
++#if defined(J2PRIME)
++	sweet_early_mark(19, "J2 root service register returned");
++#endif
