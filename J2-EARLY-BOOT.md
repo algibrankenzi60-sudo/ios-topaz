@@ -1,3 +1,9 @@
+# J2 Prime latest device state (2026-10-31)
+
+The run-49 recovery experiment reached the user's screen, whose last reported line was `J2 expert registered`; that line is not sufficient to tell whether the new run-49 kernel executed. The run-49 functional fix removes the platform expert's nested `registerService()` call from `start()` and returns success to XNU's existing `startCandidate()` lifecycle. The run-49 artifact and exact hashes are recorded at the top of `NOTES.md`.
+
+At the user's request, Download Mode was detected and the captured original boot image was written to lowercase `boot` (SHA-256 `40e1e206af7a483a356329c196c230fc0996664c2a802cf2f0e040a86ac5cf44`); the known TWRP 3.6.1 image was written to lowercase `recovery` (SHA-256 `fc8d45d70da23798b9e02e8b059774ca2f07bbd583801bfe813458910d993a23`). Heimdall reported success for both uploads, then `close-pc-screen` rebooted the device. No partition readback was performed after these writes, and ADB was not enumerated immediately after reboot. Thus the restore is upload-acknowledged, not independently readback-verified. No system, data, PIT, or other partitions were targeted. On resumption, check the handset's normal Android boot first; use TWRP only if needed, then verify status read-only.
+
 # J2 Prime XNU early-boot audit
 
 ## Run #46: root IOKit checkpoint candidate (2026-10-30)
