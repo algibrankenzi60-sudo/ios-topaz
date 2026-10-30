@@ -74,6 +74,9 @@ jobs:
       - name: Validate J2 optional trust-cache runtime
         run: python3 tools/test_j2prime_optional_trust_cache.py
 
+      - name: Validate J2 Prime IOKit platform expert
+        run: python3 tools/test_j2prime_platform_expert.py
+
       - name: Validate Xcode 16 IORPC compatibility patch
         run: python3 tools/test_xcode16_iorpc_patch.py
 
@@ -114,7 +117,7 @@ jobs:
               raise SystemExit("Pinned build.sh XNU clone command changed; refusing an unverified rewrite")
           source = source.replace(old_clone, new_clone)
           old = '                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'
-          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-4]-j2prime-* ]]; then
+          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-5]-j2prime-* ]]; then
                     printf 'Required J2 Prime patch failed: %s\\n%s\\n' "$PATCH" "$APPLY_CHECK" >&2
                     exit 1
                 fi
@@ -203,6 +206,22 @@ jobs:
           assert trust.count('#if defined(SWEET) || defined(J2PRIME)') == 6
           assert 'if (img4if == NULL || amfi == NULL)' in trust
           assert 'J2PRIME: trust caches unavailable' in trust
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          tables = Path('dxb/xnu/iokit/KernelConfigTables.cpp').read_text()
+          expert = Path('dxb/xnu/iokit/Kernel/arm/J2PrimePlatformExpert.cpp').read_text()
+          files = Path('dxb/xnu/iokit/conf/files.arm64').read_text()
+          config = Path('dxb/xnu/config/MASTER.arm64.j2prime').read_text()
+          assert "'IONameMatch'     = 'samsung,j2prime';" in tables
+          assert "'IOClass'         = J2PrimePlatformExpert;" in tables
+          assert 'class J2PrimePlatformExpert : public IODTPlatformExpert' in expert
+          assert 'J2PrimePlatformExpert::processTopLevel' in expert
+          assert 'J2PrimePlatformExpert.cpp                  optional iokitcpp j2prime_platform' in files
+          assert 'options j2prime_platform' in config
+          makefile = Path('dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/iokit/DEVELOPMENT/Makefile').read_text()
+          assert 'J2PrimePlatformExpert.cpo' in makefile
+          assert Path('dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/iokit/DEVELOPMENT/J2PrimePlatformExpert.cpo').is_file()
           PY
           grep -q 'osfmk/arm64/j2prime_ramconsole.c' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'osfmk/arm64/j2prime_exception_vectors.s' dxb/xnu/osfmk/conf/files.arm64

@@ -1,0 +1,108 @@
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -83,6 +83,14 @@
+     "     'IOMatchCategory' = SweetBattery;"
+     "   },"
+ #endif
++#if defined(ARM64_BOARD_CONFIG_J2PRIME)
++    "   {"
++    "     'IOClass'         = J2PrimePlatformExpert;"
++    "     'IOProviderClass' = IOPlatformExpertDevice;"
++    "     'IONameMatch'     = 'samsung,j2prime';"
++    "     'IOProbeScore'    = 10000:32;"
++    "   },"
++#endif
+     "   {"
+     "     'IOClass'         = IOPanicPlatform;"
+     "     'IOProviderClass' = IOPlatformExpertDevice;"
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -5,6 +5,9 @@
+ 
+ # SMP
+ iokit/Kernel/arm/AppleARMSMP.cpp    					optional iokitcpp
++
++# Samsung J2 Prime device-tree platform expert
++iokit/Kernel/arm/J2PrimePlatformExpert.cpp                  optional iokitcpp j2prime_platform
+ 
+ # SWEET device-tree platform (empty translation unit on other boards)
+ iokit/Kernel/arm/SweetPlatformExpert.cpp                         optional iokitcpp sweet_platform
+--- a/config/MASTER.arm64.j2prime
++++ b/config/MASTER.arm64.j2prime
+@@ -106,3 +106,6 @@
+ 
+ options   CONFIG_RESLIDE_SHARED_CACHE		# <reslide_shared_cache>
+ options   CONFIG_KERNEL_TBI		# <kernel_tbi>
++
++# J2 Prime device-tree platform expert only.
++options j2prime_platform
+--- a/iokit/Kernel/arm/J2PrimePlatformExpert.cpp
++++ b/iokit/Kernel/arm/J2PrimePlatformExpert.cpp
+@@ -0,0 +1,67 @@
++/*
++ * Device-tree platform expert for the Samsung Galaxy J2 Prime (SM-G532G).
++ * This uses XNU's generic ARM IODTPlatformExpert and publishes only nodes
++ * actually present in the supplied J2 ADT. It does not emulate Apple hardware.
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if defined(J2PRIME)
++#include <IOKit/IOPlatformExpert.h>
++#include <IOKit/IODeviceTreeSupport.h>
++#include <IOKit/IOLib.h>
++
++class J2PrimePlatformExpert : public IODTPlatformExpert {
++	OSDeclareDefaultStructors(J2PrimePlatformExpert);
++
++public:
++	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
++	void processTopLevel(IORegistryEntry *root) APPLE_KEXT_OVERRIDE;
++	const char *deleteList(void) APPLE_KEXT_OVERRIDE;
++	const char *excludeList(void) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(J2PrimePlatformExpert, IODTPlatformExpert);
++
++bool
++J2PrimePlatformExpert::start(IOService *provider)
++{
++	IOLog("J2PRIME: starting device-tree platform expert\n");
++	if (!IODTPlatformExpert::start(provider)) {
++		return false;
++	}
++	registerService();
++	IOLog("J2PRIME: platform expert registered\n");
++	return true;
++}
++
++const char *
++J2PrimePlatformExpert::deleteList(void)
++{
++	return "()";
++}
++
++const char *
++J2PrimePlatformExpert::excludeList(void)
++{
++	return "('chosen', 'defaults', 'cpus', 'options')";
++}
++
++void
++J2PrimePlatformExpert::processTopLevel(IORegistryEntry *root)
++{
++	/* XNU's stock path expects Apple NVRAM. Preserve the real ADT nodes. */
++	IORegistryEntry *cpus = root->childFromPath("cpus", gIODTPlane);
++	if (cpus != NULL) {
++		createNubs(this, IODTFindMatchingEntries(cpus, kIODTExclusive, NULL));
++		cpus->release();
++	}
++	createNubs(this, IODTFindMatchingEntries(root, kIODTExclusive, excludeList()));
++
++	/* The J2 ADT has only the GIC under arm-io; its driver stays platform-owned. */
++	IORegistryEntry *armio = root->childFromPath("arm-io", gIODTPlane);
++	if (armio != NULL) {
++		createNubs(this, IODTFindMatchingEntries(armio, kIODTExclusive, "('gic')"));
++		armio->release();
++	}
++}
++#endif /* J2PRIME */
