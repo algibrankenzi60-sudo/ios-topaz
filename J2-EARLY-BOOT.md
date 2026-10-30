@@ -1,5 +1,13 @@
 # J2 Prime XNU early-boot audit
 
+## Run #46: root IOKit checkpoint candidate (2026-10-30)
+
+Fixed the run #45 compile failure: patch 0968 now places its J2 markers inside `IOPlatformExpertDevice::startIOServiceMatching()`. GitHub Actions run [#46](https://github.com/algibrankenzi60-sudo/ios-topaz/actions/runs/41114784157), commit `5ec8169`, completed successfully. The `xnu-kernel-4k` artifact checksum passed; `kernel.development.j2prime` is Mach-O ARM64, 15,843,184 bytes, SHA-256 `cfff3ac3cb87a521b1f9909d2b8decbcd6e28c5da083124a8b0e6085817214a8`, with `NOUNDEFS|PIE`. The linked kernel contains all four new root workloop/service-registration marker strings.
+
+Built and verified an offline recovery image from that exact kernel, the audited MT6737 shim/loader, the 2,692-byte J2 ADT, and the byte-identical original appended DTB. Candidate `/mnt/d/J2-iOS-audit-20261027/run46-recovery-candidate/J2PRIME-RECOVERY-DO-NOT-FLASH.img` is exactly 16 MiB, SHA-256 `549eebb45d74997f348a09672d6008481d974be919ebba91f3295ebc6cdd34a9`. Checks confirmed loader size/address, compressed payload round-trip and bounds, kernel entry physical address `0x813ff488`, staging/RAM separation, and exact DTB preservation. These establish package structure only, not a successful XNU boot.
+
+After the user said the handset was in TWRP, read-only ADB identified `SM-G532G`; recovery partition `/dev/block/mmcblk0p13` was 32,768 sectors (16 MiB) and its live SHA-256 matched the saved original recovery backup (`fc8d45d70da23798b9e02e8b059774ca2f07bbd583801bfe813458910d993a23`). The live PIT independently identified partition name `recovery`, ID 13, with the same size. With the user's earlier authorization to flash this diagnostic candidate, Heimdall 2.2.2 reported `recovery upload successful` for that partition only (`--no-reboot`). The handset is now in Download Mode; candidate execution and post-flash readback are pending. No other partition was written. The backup and restore route remain available.
+
 ## Result
 
 The earlier 0x44000000 RAM candidate and its description were wrong. The captured FDT and the matching G532G MT6737T kernel DTS encode one bank as `reg = <0 0x40000000 0 0x80000000>`, which is the half-open 2 GiB interval `[0x40000000,0xc0000000)`, not a 128 MiB bank. All five retained live DTBs agree. The implementation now selects only `[0x80000000,0x84000000)`, a 64 MiB subset of the separately recorded `/proc/iomem` System RAM interval `[0x80000000,0x9f5c0000)`.
