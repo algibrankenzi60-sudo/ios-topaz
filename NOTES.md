@@ -1,5 +1,15 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## J2 Prime storage audit (2026-10-31)
+
+The user's latest screen photo shows the J2 platform expert's `ConfigureIOKit`, `StartIOKitMatching`, and `processTopLevel` checkpoints returning successfully. It does **not** establish that the CPU froze in BSD or at eMMC initialization; the last printed checkpoint is not necessarily the fault site.
+
+Offline source comparison confirms the hardware eMMC host is MediaTek MSDC0, not Qualcomm UFS: the Samsung MT6737T DTSI declares `mmc0` at physical `0x11230000`, size `0x10000`, IRQ GIC SPI 79 (`android_kernel_samsung_grandppltedx-audit/arch/arm/boot/dts/mt6735.dtsi`); the GrandPrimePlus board DTS enables it as 8-bit, non-removable eMMC (`.../mt6737t_grandpplte_ltn_open_01.dts`). The vendor Linux probe maps the first `reg` resource, resolves IRQ and clocks, reads eMMC power/tuning properties, initializes the controller and registers the MMC host (`.../drivers/mmc/host/mediatek/mt6735/sd.c`). These are source-derived hardware values; do not copy Linux virtual mappings into XNU.
+
+The current conservative J2 diagnostic ADT (`tools/mkadt_j2.py`) intentionally includes only the verified GIC, framebuffer, CPU, RAM, and `/defaults`; it has no MSDC node. The separate Topaz SWEET ADT generator (`tools/mkadt.py`) declares a Qualcomm `qcom,ufshc` at `0x04804000`, which is unrelated and must never be reused for J2. XNU patch 0952 gates `bsd/dev/sweet_ufs.c` behind `sweet_platform`, so the J2 kernel does not gain eMMC support by changing that UFS address.
+
+Conclusion / next implementation boundary: the source provides a trustworthy MSDC0 base and IRQ, but the XNU tree has no MTK MSDC host driver or J2 root-block path. A real port must implement controller init and command/data transfer (including clock/power and DMA or a verified PIO path), then expose a read-only block device/root path. Merely adding an ADT node or substituting `0x11230000` into the UFS driver is invalid. No code, phone partition, or device state was changed for this audit; no new payload was run.
+
 ## >>> J2 PRIME CURRENT HANDOFF (2026-10-30): `/defaults` required by pmap bootstrap <<<
 
 Run #30's candidate passed the old boundary: the screen showed `1–7, 21–27, 10, 28, 11, 12`, where stage 12 is `calling pmap_bootstrap`. The exact CI build tree then exposed a concrete ADT contract violation: `pmap_bootstrap()` calls `pmap_compute_max_asids()`, which asserts that `/defaults` exists (`MACH_ASSERT=1` in this DEVELOPMENT build). The candidate ADT had no `/defaults`, so this assertion can stop execution before `pmap_bootstrap` returns. The screen's stable stage 12 matches this point. An empty `/defaults` node fixes the lookup while preserving XNU's compiled-in `MAX_ASIDS`; no hardware values are invented.
