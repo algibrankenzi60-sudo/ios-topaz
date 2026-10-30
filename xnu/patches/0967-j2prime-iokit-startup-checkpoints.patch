@@ -1,0 +1,33 @@
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -62,6 +62,8 @@ extern "C" {
+ void InitIOKit(void *dtTop);
+ void ConfigureIOKit(void);
+ void StartIOKitMatching(void);
++void sweet_early_mark(unsigned int stage, const char *label);
++
+ void IORegistrySetOSBuildVersion(char * build_version);
+ void IORecordProgressBackbuffer(void * buffer, size_t size, uint32_t theme);
+ 
+@@ -172,6 +174,8 @@ ConfigureIOKit(void)
+ {
+ 	assert(gRootNub != NULL);
++	sweet_early_mark(16, "ConfigureIOKit entered");
+ 	gRootNub->configureDefaults();
++	sweet_early_mark(17, "ConfigureIOKit returned");
+ }
+ 
+ void
+@@ -181,9 +185,11 @@ StartIOKitMatching(void)
+ {
+ 	SOCD_TRACE_XNU(START_IOKIT);
+ 	assert(gRootNub != NULL);
++	sweet_early_mark(18, "StartIOKitMatching entered");
+ 	bool ok = gRootNub->startIOServiceMatching();
+ 	if (__improbable(!ok)) {
+ 		panic("Failed to start IOService matching");
+ 	}
++	sweet_early_mark(19, "StartIOKitMatching returned");
+ 
+ #if !NO_KEXTD

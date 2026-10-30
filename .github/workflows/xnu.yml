@@ -81,6 +81,9 @@ jobs:
       - name: Validate J2 post-kprintf early marker lifetime
         run: python3 tools/test_j2prime_persist_early_markers.py
 
+      - name: Validate J2 IOKit startup checkpoints
+        run: python3 tools/test_j2prime_iokit_checkpoints.py
+
       - name: Validate Xcode 16 IORPC compatibility patch
         run: python3 tools/test_xcode16_iorpc_patch.py
 
@@ -121,7 +124,7 @@ jobs:
               raise SystemExit("Pinned build.sh XNU clone command changed; refusing an unverified rewrite")
           source = source.replace(old_clone, new_clone)
           old = '                warning "Skipping patch ${PATCH} (already upstream, previously applied, or malformed): ${APPLY_CHECK}"'
-          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-6]-j2prime-* ]]; then
+          new = '''                if [[ "${PATCH##*/}" == 095[1-9]-j2prime-* || "${PATCH##*/}" == 096[0-7]-j2prime-* ]]; then
                     printf 'Required J2 Prime patch failed: %s\\n%s\\n' "$PATCH" "$APPLY_CHECK" >&2
                     exit 1
                 fi
@@ -233,6 +236,16 @@ jobs:
           makefile = Path('dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/iokit/DEVELOPMENT/Makefile').read_text()
           assert 'J2PrimePlatformExpert.cpo' in makefile
           assert Path('dxb/build/xnu.obj/DEVELOPMENT_ARM64_J2PRIME/iokit/DEVELOPMENT/J2PrimePlatformExpert.cpo').is_file()
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          start = Path('dxb/xnu/iokit/Kernel/IOStartIOKit.cpp').read_text()
+          assert 'sweet_early_mark(16, "ConfigureIOKit entered")' in start
+          assert 'sweet_early_mark(17, "ConfigureIOKit returned")' in start
+          assert 'sweet_early_mark(18, "StartIOKitMatching entered")' in start
+          assert 'sweet_early_mark(19, "StartIOKitMatching returned")' in start
+          assert start.index('sweet_early_mark(16, "ConfigureIOKit entered")') < start.index('gRootNub->configureDefaults()') < start.index('sweet_early_mark(17, "ConfigureIOKit returned")')
+          assert start.index('sweet_early_mark(18, "StartIOKitMatching entered")') < start.index('gRootNub->startIOServiceMatching()') < start.index('sweet_early_mark(19, "StartIOKitMatching returned")')
           PY
           grep -q 'osfmk/arm64/j2prime_ramconsole.c' dxb/xnu/osfmk/conf/files.arm64
           grep -q 'osfmk/arm64/j2prime_exception_vectors.s' dxb/xnu/osfmk/conf/files.arm64
