@@ -1,0 +1,99 @@
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -52,12 +52,15 @@
+ #include <IOKit/IOWorkLoop.h>
+ #include <IOKit/IOTimeStamp.h>
+ #include <IOKit/IOHibernatePrivate.h>
+ #include <IOKit/IOInterruptAccountingPrivate.h>
+ #include <IOKit/IOKernelReporters.h>
+ #include <IOKit/AppleKeyStoreInterface.h>
++#if defined(J2PRIME)
++extern "C" void sweet_early_mark(unsigned int stage, const char *label);
++#endif
+ #include <IOKit/pwr_mgt/RootDomain.h>
+ #include <IOKit/IOCPU.h>
+ #include <kern/cs_blobs.h>
+ #include <mach/sync_policy.h>
+ #include <mach/thread_info.h>
+ #include <IOKit/assert.h>
+@@ -4143,12 +4146,21 @@
+ 					if (!matchDeferred) {
+ 						/* TODO
+ 						 * If a dext fails to start because an upgrade happened
+ 						 * concurrently, then the matching process has to restart
+ 						 */
+ 						started = startCandidate( inst );
++#if defined(J2PRIME)
++						if (strcmp(inst->getMetaClass()->getClassName(), "J2PrimePlatformExpert") == 0) {
++							if (started) {
++								sweet_early_mark(24, "J2 probeCandidates resumed after expert");
++							} else {
++								sweet_early_mark(24, "J2 expert candidate start failed");
++							}
++						}
++#endif
+ #if IOMATCHDEBUG
+ 						if ((debugFlags & kIOLogStart) && (false == started)) {
+ 							LOG( "%s::start(%s) <%d> failed\n", inst->getName(), getName(),
+ 							    inst->getRetainCount());
+ 						}
+ #endif
+@@ -4846,12 +4858,22 @@
+ 
+ 	if (recordTime) {
+ 		clock_get_uptime(&startTime);
+ 	}
+ 
+ 	ok = service->start(this);
++#if defined(J2PRIME)
++	bool j2PrimeExpert = (strcmp(service->getMetaClass()->getClassName(), "J2PrimePlatformExpert") == 0);
++	if (j2PrimeExpert) {
++		if (ok) {
++			sweet_early_mark(21, "J2 expert startCandidate start returned");
++		} else {
++			sweet_early_mark(21, "J2 expert startCandidate start failed");
++		}
++	}
++#endif
+ 
+ 	if (recordTime) {
+ 		clock_get_uptime(&endTime);
+ 
+ 		if (CMP_ABSOLUTETIME(&endTime, &startTime) > 0) {
+ 			SUB_ABSOLUTETIME(&endTime, &startTime);
+@@ -4865,12 +4887,17 @@
+ 		userServer->serviceStarted(service, this, ok);
+ 		userServer->release();
+ 	}
+ 
+ 	if (ok) {
+ 		IOInstallServiceSleepPlatformActions(service);
++#if defined(J2PRIME)
++		if (j2PrimeExpert) {
++			sweet_early_mark(22, "J2 expert sleep actions installed");
++		}
++#endif
+ #if 00
+ 		if (!strcmp("XHC1", getName())) {
+ 			service->setProperty(gIOPrimaryDriverTerminateOptionsKey, kOSBooleanTrue);
+ 		}
+ #endif
+ 	}
+@@ -4880,12 +4907,17 @@
+ 	}
+ 
+ 	if (ph) {
+ 		IOServicePH::matchingEnd(this);
+ 	}
+ 
++#if defined(J2PRIME)
++	if (j2PrimeExpert) {
++		sweet_early_mark(23, "J2 expert startCandidate returning");
++	}
++#endif
+ 	return ok;
+ }
+ 
+ void
+ IOService::publishResource( const char * key, OSObject * value )
+ {

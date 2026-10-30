@@ -18,6 +18,6 @@ for marker in markers:
 
 assert patch.index(markers[0]) < patch.index("gRootNub->configureDefaults()") < patch.index(markers[1])
 assert patch.index(markers[2]) < patch.index("gRootNub->startIOServiceMatching()") < patch.index(markers[3])
-assert "096[0-8]-j2prime-*" in workflow
+assert "096[0-9]-j2prime-*" in workflow
 assert "test_j2prime_iokit_checkpoints.py" in workflow
 print("J2 IOKit checkpoints and workflow guards are consistent")

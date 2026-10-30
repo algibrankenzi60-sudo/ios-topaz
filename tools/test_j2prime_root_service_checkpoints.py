@@ -30,5 +30,5 @@ for stage in (16, 17, 18, 19):
 assert "@@ -2058,0" not in patch and "@@ -2063,0" not in patch
 
 assert "test_j2prime_root_service_checkpoints.py" in workflow
-assert "096[0-8]-j2prime-*" in workflow
+assert "096[0-9]-j2prime-*" in workflow
 print("J2 root checkpoints are context-anchored inside startIOServiceMatching")
