@@ -44,13 +44,14 @@
 +options j2prime_platform
 --- a/iokit/Kernel/arm/J2PrimePlatformExpert.cpp
 +++ b/iokit/Kernel/arm/J2PrimePlatformExpert.cpp
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,74 @@
 +/*
 + * Device-tree platform expert for the Samsung Galaxy J2 Prime (SM-G532G).
 + * This uses XNU's generic ARM IODTPlatformExpert and publishes only nodes
 + * actually present in the supplied J2 ADT. It does not emulate Apple hardware.
 + */
 +#include <pexpert/arm64/board_config.h>
++#include <arm64/sweet_early.h>
 +
 +#if defined(J2PRIME)
 +#include <IOKit/IOPlatformExpert.h>
@@ -72,11 +73,15 @@
 +bool
 +J2PrimePlatformExpert::start(IOService *provider)
 +{
++	sweet_early_mark(16, "J2 expert start entered");
 +	IOLog("J2PRIME: starting device-tree platform expert\n");
 +	if (!IODTPlatformExpert::start(provider)) {
++		sweet_early_mark(17, "J2 base expert start failed");
 +		return false;
 +	}
++	sweet_early_mark(17, "J2 base expert start returned");
 +	registerService();
++	sweet_early_mark(18, "J2 expert registered");
 +	IOLog("J2PRIME: platform expert registered\n");
 +	return true;
 +}
@@ -96,6 +101,7 @@
 +void
 +J2PrimePlatformExpert::processTopLevel(IORegistryEntry *root)
 +{
++	sweet_early_mark(19, "J2 processTopLevel entered");
 +	/* XNU's stock path expects Apple NVRAM. Preserve the real ADT nodes. */
 +	IORegistryEntry *cpus = root->childFromPath("cpus", gIODTPlane);
 +	if (cpus != NULL) {
@@ -110,5 +116,6 @@
 +		createNubs(this, IODTFindMatchingEntries(armio, kIODTExclusive, "('gic')"));
 +		armio->release();
 +	}
++	sweet_early_mark(20, "J2 processTopLevel done");
 +}
 +#endif /* J2PRIME */
