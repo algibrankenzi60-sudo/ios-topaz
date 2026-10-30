@@ -1,0 +1,15 @@
+--- a/iokit/Kernel/arm/J2PrimePlatformExpert.cpp
++++ b/iokit/Kernel/arm/J2PrimePlatformExpert.cpp
+@@ -33,11 +33,11 @@
+ 		return false;
+ 	}
+ 	sweet_early_mark(17, "J2 base expert start returned");
+ 	registerService();
+ 	sweet_early_mark(18, "J2 expert registered");
+-	IOLog("J2PRIME: platform expert registered\n");
++	sweet_early_mark(30, "J2 expert start exit path reached");
+ 	return true;
+ }
+ 
+ const char *
+ J2PrimePlatformExpert::deleteList(void)
