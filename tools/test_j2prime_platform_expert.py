@@ -12,6 +12,7 @@ checks = (
     "J2PrimePlatformExpert.cpp                  optional iokitcpp j2prime_platform",
     "class J2PrimePlatformExpert : public IODTPlatformExpert",
     "J2PrimePlatformExpert::processTopLevel",
+    'extern "C" void sweet_early_mark(unsigned int stage, const char *label);',
     'sweet_early_mark(16, "J2 expert start entered")',
     'sweet_early_mark(17, "J2 base expert start returned")',
     'sweet_early_mark(18, "J2 expert registered")',

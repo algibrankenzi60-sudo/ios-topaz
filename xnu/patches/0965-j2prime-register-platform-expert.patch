@@ -51,12 +51,12 @@
 + * actually present in the supplied J2 ADT. It does not emulate Apple hardware.
 + */
 +#include <pexpert/arm64/board_config.h>
-+#include <arm64/sweet_early.h>
 +
 +#if defined(J2PRIME)
 +#include <IOKit/IOPlatformExpert.h>
 +#include <IOKit/IODeviceTreeSupport.h>
 +#include <IOKit/IOLib.h>
++extern "C" void sweet_early_mark(unsigned int stage, const char *label);
 +
 +class J2PrimePlatformExpert : public IODTPlatformExpert {
 +	OSDeclareDefaultStructors(J2PrimePlatformExpert);

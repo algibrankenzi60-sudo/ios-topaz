@@ -219,6 +219,7 @@ jobs:
           assert "'IOClass'         = J2PrimePlatformExpert;" in tables
           assert 'class J2PrimePlatformExpert : public IODTPlatformExpert' in expert
           assert 'J2PrimePlatformExpert::processTopLevel' in expert
+          assert 'extern "C" void sweet_early_mark(unsigned int stage, const char *label);' in expert
           assert 'sweet_early_mark(16, "J2 expert start entered")' in expert
           assert 'sweet_early_mark(17, "J2 base expert start returned")' in expert
           assert 'sweet_early_mark(18, "J2 expert registered")' in expert
